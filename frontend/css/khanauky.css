@@ -1,0 +1,227 @@
+/* ============================================================
+   INDUSTRIA KHANAUKY — ESTILOS GLOBALES
+   Identidad visual: azul agua profundo + acento ámbar (sello
+   de calidad), tipografía Fraunces (display) + Inter (cuerpo).
+============================================================ */
+
+:root {
+  /* --- Paleta de marca --- */
+  --azul-profundo:  #0B3D5C;
+  --azul-marca:     #1C7C9C;
+  --celeste-agua:   #5FBFD9;
+  --ambar:          #E8902E;
+  --ambar-oscuro:   #C97315;
+  --fondo:          #F7FAFA;
+  --blanco:         #FFFFFF;
+  --texto-oscuro:   #0E2433;
+  --texto-medio:    #4A5A6A;
+  --texto-suave:    #7C8A94;
+  --borde-suave:    #DCE8EC;
+
+  /* --- Tipografía --- */
+  --ff-display: 'Fraunces', Georgia, serif;
+  --ff-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --ff-mono: 'JetBrains Mono', 'Courier New', monospace;
+
+  /* --- Geometría --- */
+  --r-pill: 999px;
+  --r-card: 16px;
+  --r-md: 10px;
+  --r-sm: 6px;
+
+  --shadow-suave: 0 4px 16px rgba(11, 61, 92, 0.08);
+  --shadow-media: 0 10px 30px rgba(11, 61, 92, 0.14);
+  --tr: 0.25s ease;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: var(--ff-body);
+  background-color: var(--fondo);
+  color: var(--texto-medio);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, .ff-display {
+  font-family: var(--ff-display);
+  color: var(--texto-oscuro);
+  letter-spacing: -0.01em;
+}
+
+a { color: var(--azul-marca); text-decoration: none; }
+a:hover { color: var(--azul-profundo); }
+
+.text-mono { font-family: var(--ff-mono); }
+
+/* ============================================================
+   NAVBAR — Idéntico en todas las páginas (inyectado por header.js)
+============================================================ */
+.navbar-khanauky {
+  background-color: var(--azul-profundo);
+  padding: 0.65rem 0;
+  transition: box-shadow var(--tr);
+}
+
+.navbar-khanauky.scrolled {
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
+}
+
+.navbar-khanauky .navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--ff-display);
+  font-weight: 600;
+  font-size: 1.4rem;
+  color: var(--blanco) !important;
+  letter-spacing: 0.3px;
+}
+
+.navbar-khanauky .navbar-brand .marca-acento { color: var(--celeste-agua); }
+
+.navbar-khanauky .brand-icon-img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.navbar-khanauky .nav-link {
+  color: rgba(255,255,255,0.88) !important;
+  font-weight: 500;
+  padding: 0.5rem 1rem !important;
+}
+
+.navbar-khanauky .nav-link:hover,
+.navbar-khanauky .nav-link.active {
+  color: var(--celeste-agua) !important;
+}
+
+.btn-acceso-nav {
+  background-color: var(--celeste-agua);
+  color: var(--azul-profundo) !important;
+  font-weight: 700 !important;
+  padding: 0.5rem 1.3rem !important;
+  border-radius: var(--r-pill);
+  transition: var(--tr);
+}
+.btn-acceso-nav:hover { background-color: var(--blanco); transform: translateY(-1px); }
+
+.btn-carrito-nav {
+  border: 1.5px solid var(--celeste-agua);
+  color: var(--celeste-agua) !important;
+  border-radius: var(--r-pill);
+  padding: 0.45rem 1.1rem !important;
+  font-weight: 600 !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-carrito-nav:hover { background-color: var(--celeste-agua); color: var(--azul-profundo) !important; }
+
+/* ============================================================
+   BOTONES GENERALES
+============================================================ */
+.btn-khanauky-primario {
+  background-color: var(--azul-marca);
+  border: none;
+  color: var(--blanco);
+  font-weight: 600;
+  padding: 0.7rem 1.6rem;
+  border-radius: var(--r-md);
+  transition: var(--tr);
+}
+.btn-khanauky-primario:hover { background-color: var(--azul-profundo); color: var(--blanco); transform: translateY(-1px); }
+
+.btn-khanauky-acento {
+  background-color: var(--ambar);
+  border: none;
+  color: var(--blanco);
+  font-weight: 700;
+  padding: 0.8rem 2rem;
+  border-radius: var(--r-pill);
+  transition: var(--tr);
+}
+.btn-khanauky-acento:hover { background-color: var(--ambar-oscuro); color: var(--blanco); transform: translateY(-2px); box-shadow: var(--shadow-media); }
+
+.btn-khanauky-outline {
+  background: transparent;
+  border: 1.5px solid var(--azul-marca);
+  color: var(--azul-marca);
+  font-weight: 600;
+  padding: 0.65rem 1.5rem;
+  border-radius: var(--r-md);
+  transition: var(--tr);
+}
+.btn-khanauky-outline:hover { background-color: var(--azul-marca); color: var(--blanco); }
+
+/* ============================================================
+   TARJETAS / CONTENEDORES REUTILIZABLES
+============================================================ */
+.card-khanauky {
+  background: var(--blanco);
+  border: 1px solid var(--borde-suave);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-suave);
+}
+
+.seccion-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ambar);
+}
+
+/* ============================================================
+   FOOTER — Idéntico en todas las páginas (inyectado por footer.js)
+============================================================ */
+.footer-khanauky {
+  background-color: var(--azul-profundo);
+  color: rgba(255,255,255,0.85);
+  padding: 60px 0 0;
+  margin-top: 60px;
+}
+.footer-khanauky h5 { color: var(--celeste-agua); font-family: var(--ff-body); font-weight: 700; font-size: 1rem; margin-bottom: 18px; }
+.footer-khanauky a { color: rgba(255,255,255,0.75); transition: var(--tr); }
+.footer-khanauky a:hover { color: var(--celeste-agua); padding-left: 3px; }
+.footer-khanauky .footer-bottom { border-top: 1px solid rgba(255,255,255,0.12); margin-top: 36px; padding: 18px 0; font-size: 0.85rem; color: rgba(255,255,255,0.6); text-align: center; }
+.footer-khanauky .footer-logo { font-family: var(--ff-display); font-size: 1.3rem; color: var(--blanco); margin-bottom: 12px; }
+
+/* ============================================================
+   FORMULARIOS GENERALES
+============================================================ */
+.form-control, .form-select {
+  border: 1.5px solid var(--borde-suave);
+  border-radius: var(--r-sm);
+  padding: 0.65rem 0.9rem;
+  font-family: var(--ff-body);
+}
+.form-control:focus, .form-select:focus {
+  border-color: var(--azul-marca);
+  box-shadow: 0 0 0 3px rgba(28, 124, 156, 0.12);
+}
+.form-label { font-weight: 600; color: var(--texto-oscuro); font-size: 0.88rem; }
+
+/* ============================================================
+   UTILIDADES
+============================================================ */
+.text-azul-marca { color: var(--azul-marca); }
+.text-ambar { color: var(--ambar); }
+.bg-fondo-suave { background-color: var(--fondo); }
+.divisor-agua { height: 3px; width: 60px; background: linear-gradient(90deg, var(--azul-marca), var(--celeste-agua)); border-radius: var(--r-pill); margin: 0.6rem 0 1.4rem; }
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  background: var(--ambar);
+  color: white;
+  padding: 8px 16px;
+  z-index: 2000;
+}
+.skip-link:focus { left: 10px; top: 10px; }
+
+@media (max-width: 768px) {
+  .navbar-khanauky .navbar-brand { font-size: 1.2rem; }
+}

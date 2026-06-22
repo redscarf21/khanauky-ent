@@ -1,0 +1,16 @@
+# Dependencias (se reinstalan con npm install)
+node_modules/
+
+# Variables de entorno con datos secretos — NUNCA subir esto a GitHub
+.env
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Carpeta de assets temporales de vendor (solo para pruebas locales)
+frontend/vendor/

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel de gestión | Industria Khanauky</title>
+  <link rel="icon" type="image/svg+xml" href="img/favicon.svg">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/khanauky.css">
+  <style>
+    body { margin: 0; background: var(--fondo); }
+    .layout-admin { display: flex; min-height: 100vh; }
+    .sidebar-admin {
+      width: 250px; flex-shrink: 0; background: var(--azul-profundo); color: white;
+      display: flex; flex-direction: column; position: fixed; top:0; left:0; bottom:0; z-index: 1040;
+      transform: translateX(-100%); transition: transform 0.25s ease;
+    }
+    .sidebar-admin.abierto { transform: translateX(0); }
+    @media (min-width: 992px) { .sidebar-admin { transform: translateX(0); } }
+
+    .sidebar-header { padding: 22px 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .sidebar-header h5 { color: white; margin: 0; font-family: var(--ff-display); letter-spacing: 1px; }
+    .sidebar-header p { color: var(--celeste-agua); font-size: 0.78rem; margin: 4px 0 0; }
+
+    .menu-btn { padding: 14px 22px; background: none; border: none; color: rgba(255,255,255,0.82); text-align: left; cursor: pointer; font-size: 0.92rem; font-weight: 500; border-left: 4px solid transparent; transition: var(--tr); display: flex; align-items: center; gap: 10px; }
+    .menu-btn:hover { background: rgba(255,255,255,0.06); }
+    .menu-btn.activa { background: rgba(255,255,255,0.1); border-left-color: var(--celeste-agua); color: white; }
+
+    .logout-btn { margin-top: auto; background: #C53030; color: white; padding: 16px; border: none; cursor: pointer; font-weight: 700; }
+    .logout-btn:hover { background: #9B2C2C; }
+
+    .main-admin { flex: 1; min-width: 0; }
+    @media (min-width: 992px) { .main-admin { margin-left: 250px; } }
+
+    .topbar-admin { background: white; padding: 16px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; position: sticky; top:0; z-index: 1020; }
+    .btn-menu-movil { display: inline-flex; background: var(--azul-profundo); color: white; border: none; border-radius: 8px; width: 38px; height: 38px; align-items: center; justify-content: center; }
+    @media (min-width: 992px) { .btn-menu-movil { display: none; } }
+
+    .content-admin { padding: 26px; }
+    .seccion-admin { display: none; }
+    .seccion-admin.activa { display: block; animation: fadeInAdmin 0.3s ease; }
+    @keyframes fadeInAdmin { from { opacity:0; transform: translateY(8px);} to {opacity:1; transform: translateY(0);} }
+
+    .kpi-card { background: white; border-radius: var(--r-card); padding: 22px; box-shadow: var(--shadow-suave); }
+    .kpi-card .valor { font-family: var(--ff-display); font-size: 1.9rem; color: var(--azul-profundo); font-weight: 600; }
+    .kpi-card .icono { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--fondo); color: var(--azul-marca); font-size: 1.2rem; }
+
+    .tabla-khanauky { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; box-shadow: var(--shadow-suave); }
+    .tabla-khanauky th { background: var(--azul-profundo); color: white; padding: 13px; text-transform: uppercase; font-size: 0.78rem; letter-spacing: 0.5px; text-align: left; }
+    .tabla-khanauky td { padding: 13px; border-bottom: 1px solid var(--borde-suave); color: var(--texto-medio); font-size: 0.9rem; }
+    .tabla-khanauky tbody tr:hover { background: var(--fondo); }
+
+    .overlay-sidebar { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1030; display: none; }
+    .overlay-sidebar.activo { display: block; }
+
+    .punto-estado { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+    .estado-Venta-Registrada { background-color: #D32F2F; }
+    .estado-Venta-Exitosa { background-color: #388E3C; }
+    .estado-Entrega-Pendiente { background-color: #1976D2; }
+    .estado-Venta-Entregada { background-color: #7B1FA2; }
+
+    .leyenda-estados { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.82rem; color: var(--texto-suave); margin-bottom: 18px; }
+    .leyenda-estados span { display: flex; align-items: center; }
+
+    .tabs-reporte { display: flex; gap: 6px; margin-bottom: 18px; }
+    .tab-reporte-btn { background: white; border: 1px solid var(--borde-suave); color: var(--texto-medio); padding: 8px 18px; border-radius: var(--r-pill); font-weight: 600; font-size: 0.85rem; cursor: pointer; }
+    .tab-reporte-btn.activa { background: var(--azul-marca); color: white; border-color: var(--azul-marca); }
+
+    .badge-modalidad { font-size: 0.72rem; padding: 3px 9px; border-radius: var(--r-pill); font-weight: 700; }
+    .badge-recojo { background: #FFF4E5; color: #8A5A12; }
+    .badge-delivery { background: #E3F2FD; color: #1565C0; }
+  </style>
+</head>
+<body>
+
+  <div class="layout-admin">
+    <div class="overlay-sidebar" id="overlaySidebar"></div>
+
+    <aside class="sidebar-admin" id="sidebarAdmin">
+      <div class="sidebar-header">
+        <a href="index.html" class="text-decoration-none">
+          <h5><i class="bi bi-droplet-fill"></i> KHANAUKY</h5>
+        </a>
+        <p>Panel de gestión</p>
+      </div>
+      <button class="menu-btn activa" data-target="sec-inicio"><i class="bi bi-house-door"></i> Inicio</button>
+      <button class="menu-btn" data-target="sec-registro"><i class="bi bi-bag-plus"></i> Registrar venta</button>
+      <button class="menu-btn" data-target="sec-reporte"><i class="bi bi-bar-chart"></i> Reporte de ventas</button>
+      <button class="menu-btn" data-target="sec-buscar"><i class="bi bi-search"></i> Buscar por DNI</button>
+      <button class="menu-btn" data-target="sec-factura"><i class="bi bi-receipt"></i> Generar comprobante</button>
+      <button class="menu-btn" data-target="sec-sucursales"><i class="bi bi-shop"></i> Sucursales</button>
+      <button class="menu-btn" data-target="sec-empleados"><i class="bi bi-people"></i> Empleados</button>
+      <a href="index.html" class="menu-btn d-flex" style="text-decoration:none;"><i class="bi bi-box-arrow-left"></i> Ver sitio público</a>
+      <button id="btnCerrarSesion" class="logout-btn"><i class="bi bi-box-arrow-right me-1"></i> Cerrar sesión</button>
+    </aside>
+
+    <div class="main-admin">
+      <div class="topbar-admin">
+        <div class="d-flex align-items-center gap-3">
+          <button class="btn-menu-movil" id="btnAbrirSidebar"><i class="bi bi-list fs-5"></i></button>
+          <h5 class="mb-0 text-azul-marca" style="font-family:var(--ff-display)">Sistema de gestión Khanauky</h5>
+        </div>
+        <div class="small text-mid">Sesión: <strong id="nombreEmpleado">Cargando...</strong></div>
+      </div>
+
+      <div class="content-admin">
+
+        <!-- INICIO / DASHBOARD -->
+        <section id="sec-inicio" class="seccion-admin activa">
+          <h4 class="mb-4">Panel principal</h4>
+          <div class="row g-3 mb-4">
+            <div class="col-sm-6 col-lg-3">
+              <div class="kpi-card d-flex justify-content-between align-items-start">
+                <div><div class="small text-mid">Pedidos totales</div><div class="valor" id="kpiPedidos">0</div></div>
+                <div class="icono"><i class="bi bi-bag-check"></i></div>
+              </div>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+              <div class="kpi-card d-flex justify-content-between align-items-start">
+                <div><div class="small text-mid">Ventas totales</div><div class="valor" id="kpiVentas">S/ 0</div></div>
+                <div class="icono"><i class="bi bi-cash-coin"></i></div>
+              </div>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+              <div class="kpi-card d-flex justify-content-between align-items-start">
+                <div><div class="small text-mid">Pendientes de entrega</div><div class="valor" id="kpiPendientes">0</div></div>
+                <div class="icono"><i class="bi bi-truck"></i></div>
+              </div>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+              <div class="kpi-card d-flex justify-content-between align-items-start">
+                <div><div class="small text-mid">Sucursales activas</div><div class="valor" id="kpiSucursales">0</div></div>
+                <div class="icono"><i class="bi bi-shop"></i></div>
+              </div>
+            </div>
+          </div>
+          <p class="text-mid small">Usa el menú lateral para registrar ventas, revisar reportes y gestionar tu negocio.</p>
+        </section>
+
+        <!-- REGISTRAR VENTA (presencial, hecha por el empleado) -->
+        <section id="sec-registro" class="seccion-admin">
+          <h4 class="mb-4">Registrar nueva venta presencial</h4>
+          <form id="formVentaPresencial" class="card-khanauky p-4">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Nombre del cliente</label>
+                <input type="text" class="form-control" id="ventaCliente" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">DNI</label>
+                <input type="text" class="form-control" id="ventaDni" maxlength="8">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Teléfono</label>
+                <input type="text" class="form-control" id="ventaTelefono" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Sucursal</label>
+                <select class="form-select" id="ventaSucursal" required></select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">RUC (solo si pide factura)</label>
+                <input type="text" class="form-control" id="ventaRuc" maxlength="11" placeholder="Opcional">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Razón social (solo si pide factura)</label>
+                <input type="text" class="form-control" id="ventaRazonSocial" placeholder="Opcional">
+              </div>
+            </div>
+
+            <hr class="my-4">
+            <div id="itemsVenta"></div>
+            <button type="button" class="btn-khanauky-outline mt-2" id="btnAgregarItem"><i class="bi bi-plus"></i> Agregar producto</button>
+
+            <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+              <strong>Total estimado: <span id="totalVentaPresencial">S/ 0.00</span></strong>
+              <button type="submit" class="btn-khanauky-primario">Registrar venta</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- REPORTE -->
+        <section id="sec-reporte" class="seccion-admin">
+          <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+            <h4 class="mb-0">Reporte de ventas</h4>
+          </div>
+
+          <div class="tabs-reporte">
+            <button class="tab-reporte-btn activa" data-reporte="diario">Reporte diario</button>
+            <button class="tab-reporte-btn" data-reporte="mensual">Reporte mensual</button>
+          </div>
+
+          <div class="leyenda-estados">
+            <span><span class="punto-estado estado-Venta-Registrada"></span>Venta Registrada — recién creada</span>
+            <span><span class="punto-estado estado-Venta-Exitosa"></span>Venta Exitosa — pago confirmado</span>
+            <span><span class="punto-estado estado-Entrega-Pendiente"></span>Entrega Pendiente — en camino o por recoger</span>
+            <span><span class="punto-estado estado-Venta-Entregada"></span>Venta Entregada — pedido completado</span>
+          </div>
+
+          <div id="vistaReporteDiario">
+            <div id="contenedorTablaPedidos">Cargando datos...</div>
+          </div>
+
+          <div id="vistaReporteMensual" class="d-none">
+            <div class="row g-3 mb-4">
+              <div class="col-sm-6 col-lg-4">
+                <div class="kpi-card">
+                  <div class="small text-mid">Meses con ventas registradas</div>
+                  <div class="valor" id="kpiMesesConVentas">0</div>
+                </div>
+              </div>
+              <div class="col-sm-6 col-lg-4">
+                <div class="kpi-card">
+                  <div class="small text-mid">Total histórico</div>
+                  <div class="valor" id="kpiTotalHistorico">S/ 0</div>
+                </div>
+              </div>
+              <div class="col-sm-6 col-lg-4">
+                <div class="kpi-card">
+                  <div class="small text-mid">Promedio mensual</div>
+                  <div class="valor" id="kpiPromedioMensual">S/ 0</div>
+                </div>
+              </div>
+            </div>
+            <div id="contenedorTablaMensual">Cargando datos...</div>
+          </div>
+        </section>
+
+        <!-- BUSCAR -->
+        <section id="sec-buscar" class="seccion-admin">
+          <h4 class="mb-4">Buscar por DNI / teléfono</h4>
+          <div class="d-flex gap-2 mb-3" style="max-width: 420px;">
+            <input type="text" class="form-control" id="inputDni" placeholder="Ingrese DNI o teléfono...">
+            <button class="btn-khanauky-primario" id="btnBuscarDni">Buscar</button>
+          </div>
+          <div id="resultadoBusqueda"></div>
+        </section>
+
+        <!-- FACTURA -->
+        <section id="sec-factura" class="seccion-admin">
+          <h4 class="mb-4">Generar comprobante</h4>
+          <p class="text-mid">Selecciona una orden para descargar su boleta o factura en PDF:</p>
+          <button class="btn-khanauky-outline mb-3" id="btnListarFacturas">Listar todas las ventas</button>
+          <div id="listaFacturas"></div>
+        </section>
+
+        <!-- SUCURSALES -->
+        <section id="sec-sucursales" class="seccion-admin">
+          <h4 class="mb-4">Gestión de sucursales</h4>
+          <form id="formSucursal" class="d-flex flex-wrap gap-2 mb-4" style="max-width: 600px;">
+            <input type="text" class="form-control" id="nuevaSucursalNombre" placeholder="Nombre de la sucursal" required style="flex:1;">
+            <input type="text" class="form-control" id="nuevaSucursalDireccion" placeholder="Dirección (opcional)" style="flex:1;">
+            <button type="submit" class="btn-khanauky-primario">Agregar</button>
+          </form>
+          <div id="listaSucursalesAdmin" class="mb-4"></div>
+
+          <h5 class="mb-3">Resumen de ingresos por sucursal</h5>
+          <div id="resumenIngresosSucursales">Cargando datos...</div>
+        </section>
+
+        <!-- EMPLEADOS -->
+        <section id="sec-empleados" class="seccion-admin">
+          <h4 class="mb-4">Gestión de empleados</h4>
+          <p class="text-mid small">Por seguridad, las cuentas de empleado solo pueden crearse desde aquí dentro, nunca desde el registro público.</p>
+          <form id="formEmpleado" class="card-khanauky p-4 mb-4" style="max-width: 520px;">
+            <div class="mb-3"><label class="form-label">Nombre completo</label><input type="text" class="form-control" id="empNombre" required></div>
+            <div class="mb-3"><label class="form-label">Usuario</label><input type="text" class="form-control" id="empUsuario" required></div>
+            <div class="mb-3"><label class="form-label">Correo</label><input type="email" class="form-control" id="empEmail" required></div>
+            <div class="mb-3"><label class="form-label">Contraseña temporal</label><input type="password" class="form-control" id="empPass" required minlength="6"></div>
+            <button type="submit" class="btn-khanauky-primario w-100">Crear cuenta de empleado</button>
+            <p id="empMensaje" class="small mt-2 mb-0"></p>
+          </form>
+
+          <h5 class="mb-3">Empleados registrados</h5>
+          <p class="text-mid small" id="avisoAdminPrincipal"></p>
+          <div id="tablaEmpleados">Cargando datos...</div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/panel_admin.js"></script>
+</body>
+</html>

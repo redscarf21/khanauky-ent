@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acceso al sistema | Industria Khanauky</title>
+  <link rel="icon" type="image/svg+xml" href="img/favicon.svg">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/khanauky.css">
+  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+  <style>
+    body { background: linear-gradient(160deg, var(--azul-profundo) 0%, #133f59 55%, var(--azul-marca) 100%); min-height: 100vh; }
+    .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 110px 16px 60px; }
+    .login-card { background: var(--blanco); border-radius: var(--r-card); box-shadow: var(--shadow-media); width: 100%; max-width: 460px; padding: 2.6rem; }
+    .login-card h2 { margin-bottom: 4px; }
+    .subtitle { color: var(--texto-suave); font-size: 0.9rem; margin-bottom: 24px; }
+    .nav-tabs-khanauky { border-bottom: 2px solid var(--fondo); margin-bottom: 1.8rem; }
+    .nav-tabs-khanauky .nav-link { border: none; color: var(--texto-suave); font-weight: 600; padding: 10px 4px; margin-right: 24px; }
+    .nav-tabs-khanauky .nav-link.active { color: var(--azul-marca); border-bottom: 3px solid var(--azul-marca); background: transparent; }
+    .error-text { color: #C53030; font-size: 0.88rem; font-weight: 600; min-height: 18px; }
+    #captchaSlot { margin-bottom: 1rem; display: none; }
+  </style>
+</head>
+<body>
+  <div id="navbarSlot"></div>
+
+  <div class="login-wrap">
+    <div class="login-card">
+      <h2>Acceso al sistema</h2>
+      <p class="subtitle">Ingresa para gestionar tus pedidos de agua y hielo Aquaelis.</p>
+
+      <ul class="nav nav-tabs-khanauky" role="tablist">
+        <li class="nav-item"><button class="nav-link active" id="btnCliente" type="button">Cliente</button></li>
+        <li class="nav-item"><button class="nav-link" id="btnEmpleado" type="button">Administrador</button></li>
+      </ul>
+
+      <form id="login-form" novalidate>
+        <div class="mb-3">
+          <label class="form-label" id="labelUsuario">Correo electrónico</label>
+          <input type="text" class="form-control" id="usuario" required placeholder="tu@correo.com">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Contraseña</label>
+          <input type="password" class="form-control" id="password" required placeholder="••••••••">
+        </div>
+
+        <div id="captchaSlot">
+          <div class="g-recaptcha" data-sitekey="6Ldo5iotAAAAAJ77CBLCzMNrm6DpGNLS-I1RGK9J" id="recaptchaWidget"></div>
+        </div>
+
+        <button type="submit" class="btn-khanauky-primario w-100 mb-2">Ingresar</button>
+        <p id="error-msg" class="error-text mb-0"></p>
+
+        <div class="text-end mt-2 mb-3" id="bloqueOlvideContrasena">
+          <a href="recuperar-password.html" class="small">¿Olvidaste tu contraseña?</a>
+        </div>
+
+        <div class="text-center" id="bloqueCrearCuenta">
+          <p class="small mb-1 text-mid">¿Aún no tienes cuenta?</p>
+          <a href="registro.html" class="fw-bold">Crear una cuenta aquí</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="footerSlot"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>inicializarLayout();</script>
+  <script src="js/login.js"></script>
+</body>
+</html>
