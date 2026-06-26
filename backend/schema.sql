@@ -1,4 +1,4 @@
--- sql - neon
+-- sql -- neon
 
 CREATE TABLE IF NOT EXISTS sucursales (
     id SERIAL PRIMARY KEY,
