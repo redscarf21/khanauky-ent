@@ -1,7 +1,4 @@
--- ============================================================
--- ESQUEMA DE BASE DE DATOS - INDUSTRIA KHANAUKY
--- PostgreSQL (Neon)
--- ============================================================
+-- sql - neon
 
 CREATE TABLE IF NOT EXISTS sucursales (
     id SERIAL PRIMARY KEY,

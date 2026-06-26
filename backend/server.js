@@ -259,9 +259,7 @@ app.post("/api/logout", (req, res) => {
   res.json({ mensaje: "Sesión cerrada." });
 });
 
-// ============================================================
-// PRODUCTOS Y SUCURSALES
-// ============================================================
+// productos y sucursales
 
 app.get("/api/productos", async (req, res) => {
   const { rows } = await query(`SELECT * FROM productos ORDER BY id`);
@@ -297,9 +295,7 @@ app.get("/api/sucursales/resumen-ingresos", requiereRol("empleado"), async (req,
   res.json(rows.map((r) => ({ id: r.id, nombre: r.nombre, totalPedidos: Number(r.total_pedidos), totalIngresos: Number(r.total_ingresos) })));
 });
 
-// ============================================================
-// COTIZACIÓN
-// ============================================================
+// cotizar
 
 app.post("/api/cotizar", async (req, res) => {
   try {
@@ -314,9 +310,7 @@ app.post("/api/cotizar", async (req, res) => {
   }
 });
 
-// ============================================================
-// PEDIDOS
-// ============================================================
+// pedidos
 
 async function crearPedidoEnBD({ usuarioId, registradoPor, cliente, telefono, direccion, dni, ruc, razonSocial, sucursalNombre, metodopago, productos, estadoInicial }) {
   const resumen = calcularResumenVenta(productos);
@@ -461,9 +455,7 @@ app.get("/api/pedidos/buscar/:dato", requiereRol("empleado"), async (req, res) =
   res.json(rows.map((r) => mapearPedidoConDetalle(r, [])));
 });
 
-// ============================================================
-// COMPROBANTES PDF
-// ============================================================
+// comprobantes pdf
 
 app.get("/api/pedidos/:codigo/comprobante", requiereSesion, async (req, res) => {
   try {
@@ -482,9 +474,7 @@ app.get("/api/pedidos/:codigo/comprobante", requiereSesion, async (req, res) => 
   }
 });
 
-// ============================================================
-// EMPLEADOS (gestión interna, solo admin/empleados)
-// ============================================================
+// admin/empleados
 
 app.get("/api/empleados", requiereRol("empleado"), async (req, res) => {
   const { rows } = await query(
@@ -517,7 +507,7 @@ app.post("/api/empleados", requiereRol("empleado"), async (req, res) => {
   }
 });
 
-// Solo el admin principal puede asignar una contraseña nueva a otro empleado
+// solo el admin principal puede asignar una contraseña nueva a otro empleado
 app.post("/api/empleados/:id/asignar-password", requiereAdminPrincipal, async (req, res) => {
   try {
     const { rows } = await query(`SELECT * FROM usuarios WHERE id = $1 AND rol = 'empleado'`, [req.params.id]);
