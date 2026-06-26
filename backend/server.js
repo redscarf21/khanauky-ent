@@ -507,7 +507,7 @@ app.post("/api/empleados", requiereRol("empleado"), async (req, res) => {
   }
 });
 
-// solo el admin principal puede asignar una contraseña nueva a otro empleado
+// solo el admin principal puede asignar una contraseña nueva a otro admin
 app.post("/api/empleados/:id/asignar-password", requiereAdminPrincipal, async (req, res) => {
   try {
     const { rows } = await query(`SELECT * FROM usuarios WHERE id = $1 AND rol = 'empleado'`, [req.params.id]);
