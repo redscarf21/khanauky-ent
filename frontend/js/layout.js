@@ -28,7 +28,7 @@ function plantillaNavbar(paginaActual) {
 
 function plantillaFooter() {
   const direccion = "Av. José Olaya Mz. F Lote 12, Urb. La Victoria, Chao, Virú";
-  const linkMaps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion + ", Perú")}`;
+  const linkMaps = "https://maps.app.goo.gl/FAUAiAe1DdyJiwqN9";
   const telefono = "933260258";
   const linkWhatsapp = `https://wa.me/51${telefono}`;
 
@@ -49,6 +49,10 @@ function plantillaFooter() {
             <i class="bi bi-whatsapp"></i><span>933 260 258</span>
           </a>
           <p class="small mb-1"><i class="bi bi-envelope-fill me-2"></i>administracion@khanauky.com</p>
+          <div class="d-flex gap-3 mt-2">
+            <a href="https://www.instagram.com/agua_aquaelis" target="_blank" rel="noopener" class="fs-5" title="Instagram"><i class="bi bi-instagram"></i></a>
+            <a href="https://web.facebook.com/agua.aquaelis" target="_blank" rel="noopener" class="fs-5" title="Facebook"><i class="bi bi-facebook"></i></a>
+          </div>
         </div>
         <div class="col-md-4">
           <h5>Enlaces rápidos</h5>
