@@ -92,9 +92,7 @@ async function obtenerPedidoCompleto(codigoOrden) {
   return mapearPedidoConDetalle(rows[0], items.map((i) => ({ ...i, precioUnitarioBase: Number(i.precioUnitarioBase), subtotal: Number(i.subtotal), descuento: Number(i.descuento) })));
 }
 
-// ============================================================
-// AUTENTICACIÓN
-// ============================================================
+// autenticació
 
 app.post("/api/login", limiteLogin, async (req, res) => {
   try {
