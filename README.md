@@ -18,13 +18,13 @@ Este proyecto nace con el objetivo de digitalizar el proceso de ventas de la emp
 
 ## Cómo está hecho
 
-**Frontend:** HTML, CSS y JavaScript, usando Bootstrap para los estilos y componentes.
+Frontend: HTML, CSS y JavaScript, usando Bootstrap para los estilos y componentes.
 
-**Backend:** Node.js con Express.
+Backend: Node.js con Express.
 
-**Base de datos:** PostgreSQL.
+Base de datos: PostgreSQL.
 
-**Otros servicios usados:** Google reCAPTCHA (para el login de administradores) y envío de correos automáticos para confirmación de cuenta y recuperación de contraseña.
+Otros servicios usados: Google reCAPTCHA (para el login de administradores).
 
 ## Sobre el proyecto
 
