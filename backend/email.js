@@ -1,16 +1,34 @@
-import nodemailer from "nodemailer";
-
 const SITE_URL = process.env.SITE_URL || "http://localhost:3000";
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const EMAIL_FROM_NAME = "Industria Khanauky";
+const EMAIL_FROM_ADDRESS = process.env.GMAIL_USER;
 
-const transportador = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD
+async function enviar(destinatario, subject, htmlContent) {
+  try {
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": BREVO_API_KEY
+      },
+      body: JSON.stringify({
+        sender: { name: EMAIL_FROM_NAME, email: EMAIL_FROM_ADDRESS },
+        to: [{ email: destinatario }],
+        subject,
+        htmlContent
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      console.error("Error Brevo:", err);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("Error enviando correo:", error);
+    return false;
   }
-});
-
-const EMAIL_FROM = `Industria Khanauky <${process.env.GMAIL_USER}>`;
+}
 
 function plantillaBase(titulo, contenidoHtml) {
   return `
@@ -29,16 +47,6 @@ function plantillaBase(titulo, contenidoHtml) {
       </div>
     </div>
   </div>`;
-}
-
-async function enviar(destinatario, subject, html) {
-  try {
-    await transportador.sendMail({ from: EMAIL_FROM, to: destinatario, subject, html });
-    return true;
-  } catch (error) {
-    console.error("Error enviando correo:", error);
-    return false;
-  }
 }
 
 export async function enviarCorreoVerificacion(destinatario, nombre, token) {
