@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS ubigeo (
     ubigeo_id     SERIAL PRIMARY KEY,
     departamento  VARCHAR(50) NOT NULL,
     provincia     VARCHAR(50) NOT NULL,
-    distrito      VARCHAR(50) NOT NULL
+    distrito      VARCHAR(50) NOT NULL,
+    CONSTRAINT ubigeo_uq UNIQUE (departamento, provincia, distrito)
 );
 
 CREATE TABLE IF NOT EXISTS tipo_comprobante (
@@ -41,12 +42,14 @@ CREATE TABLE IF NOT EXISTS estado_empleado (
 CREATE TABLE IF NOT EXISTS tipo_contrato (
     tipo_contrato_id SERIAL PRIMARY KEY,
     descripcion      VARCHAR(50) NOT NULL,
-    sueldo           NUMERIC(10,2) NOT NULL CHECK (sueldo >= 0)
+    sueldo           NUMERIC(10,2) NOT NULL CHECK (sueldo >= 0),
+    CONSTRAINT tipo_contrato_desc_uq UNIQUE (descripcion)
 );
 
 CREATE TABLE IF NOT EXISTS roles (
     rol_id      SERIAL PRIMARY KEY,
-    descripcion VARCHAR(50) NOT NULL
+    descripcion VARCHAR(50) NOT NULL,
+    CONSTRAINT roles_desc_uq UNIQUE (descripcion)
 );
 
 CREATE TABLE IF NOT EXISTS capacidad (
@@ -345,7 +348,7 @@ INSERT INTO ubigeo (departamento, provincia, distrito) VALUES
 ('La Libertad', 'Trujillo', 'El Porvenir'),
 ('La Libertad', 'Virú',     'Virú'),
 ('La Libertad', 'Trujillo', 'Moche')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (departamento, provincia, distrito) DO NOTHING;
 
 INSERT INTO tipo_comprobante (descripcion) VALUES
 ('Boleta'),
@@ -383,7 +386,7 @@ INSERT INTO tipo_contrato (descripcion, sueldo) VALUES
 ('Planta Permanente - Entrega',     1300.00),
 ('Tiempo Parcial',                   700.00),
 ('Práctica Pre-Profesional',        1025.00)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (descripcion) DO NOTHING;
 
 INSERT INTO roles (descripcion) VALUES
 ('Conductor'),
@@ -391,7 +394,7 @@ INSERT INTO roles (descripcion) VALUES
 ('Supervisor de Producción'),
 ('Operario de Llenado'),
 ('Control de Calidad')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (descripcion) DO NOTHING;
 
 INSERT INTO capacidad (descripcion) VALUES
 ('20 Litros'),
