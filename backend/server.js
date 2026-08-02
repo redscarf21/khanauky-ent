@@ -344,7 +344,7 @@ app.get("/api/mi-perfil", requiereSesion, async (req, res) => {
 
     const { rows } = await query(`
       SELECT u.nombre, u.email, c.cliente_id, c.direccion, c.telefono,
-             c.tipo_cliente, c.fecha_registro,
+             c.tipo_cliente, c.fecha_registro, c.ubigeo_id,
              ub.departamento, ub.provincia, ub.distrito,
              p.nombres, p.apellidos, p.dni, p.sexo,
              e.razon_social, e.ruc

@@ -9,6 +9,7 @@ let pedido = JSON.parse(localStorage.getItem("carritoAgua")) || [];
 let resumenActual = null;
 let metodosPago = [];
 let tiposComprobante = [];
+let ubigeoIdCliente = null;
 
 checkFactura.addEventListener("change", () => {
   bloqueFactura.classList.toggle("d-none", !checkFactura.checked);
@@ -48,6 +49,13 @@ async function cargarResumen() {
     const { usuario } = await Api.get("/api/sesion");
     document.getElementById("nombre").value = usuario.nombre || "";
   } catch {}
+
+  try {
+    const perfil = await Api.get("/api/mi-perfil");
+    ubigeoIdCliente = perfil.ubigeo_id || null;
+    document.getElementById("direccion").value = perfil.direccion || "";
+    document.getElementById("telefono").value = perfil.telefono || "";
+  } catch {}
 }
 
 async function cargarOpciones() {
@@ -79,7 +87,7 @@ document.getElementById("formularioPedido").addEventListener("submit", async (e)
     metodoPagoId: parseInt(document.getElementById("metodoPagoId").value),
     comprobanteId: comprobanteId || 1,
     direccionEntrega: document.getElementById("direccion").value,
-    ubigeoId: document.getElementById("ubigeoEntrega")?.value || null
+    ubigeoId: ubigeoIdCliente
   };
 
   btnConfirmar.disabled = true;
