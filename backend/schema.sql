@@ -190,7 +190,8 @@ CREATE TABLE IF NOT EXISTS producto (
     precio_mayorista  NUMERIC(10,2)  NOT NULL CHECK (precio_mayorista >= 0),
     categoria_id      INT NOT NULL REFERENCES categoria(categoria_id),
     capacidad_id      INT NOT NULL REFERENCES capacidad(capacidad_id),
-    imagen            VARCHAR(255)
+    imagen            VARCHAR(255),
+    CONSTRAINT producto_nombre_uq UNIQUE (nombre_producto)
 );
 
 CREATE TABLE IF NOT EXISTS produccion_lotes (
@@ -425,4 +426,4 @@ INSERT INTO producto (nombre_producto, descripcion, precio_minorista, precio_may
 ('Agua Embotellada 650ml', 'Botella individual Aquaelis, ideal para consumo personal.',       2.00,  1.50, 2, 3, 'agua-650ml.jpg'),
 ('Hielo en Bolsa 1.5kg',   'Hielo Aquaelis Ice, tratado con los mismos estándares de pureza.', 4.00, 3.50, 3, 4, 'hielo-1-5kg.jpg'),
 ('Hielo en Bolsa 3kg',     'Formato grande de hielo Aquaelis Ice, ideal para eventos.',      7.50,  6.50, 3, 5, 'hielo-3kg.jpg')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (nombre_producto) DO NOTHING;
