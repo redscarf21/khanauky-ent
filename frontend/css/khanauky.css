@@ -225,3 +225,232 @@ a:hover { color: var(--azul-profundo); }
 @media (max-width: 768px) {
   .navbar-khanauky .navbar-brand { font-size: 1.2rem; }
 }
+
+/* ============================================================
+   PANEL ADMIN — Layout y componentes del sistema de gestión
+============================================================ */
+
+.layout-admin {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar-admin {
+  width: 260px;
+  min-height: 100vh;
+  background-color: var(--azul-profundo);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 1040;
+  overflow-y: auto;
+  transition: transform var(--tr);
+}
+
+.sidebar-header {
+  padding: 24px 20px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.sidebar-header h5 {
+  color: var(--blanco);
+  font-family: var(--ff-display);
+  font-size: 1.1rem;
+  margin: 0 0 4px;
+}
+.sidebar-header p {
+  color: var(--celeste-agua);
+  font-size: 0.78rem;
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+.menu-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 20px;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.75);
+  font-family: var(--ff-body);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--tr);
+}
+.menu-btn:hover { background-color: rgba(255,255,255,0.08); color: var(--blanco); }
+.menu-btn.activa { background-color: rgba(95,191,217,0.18); color: var(--celeste-agua); font-weight: 700; border-left: 3px solid var(--celeste-agua); }
+
+.logout-btn {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 20px;
+  background: rgba(200,50,50,0.18);
+  border: none;
+  color: #FF8A80;
+  font-family: var(--ff-body);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--tr);
+}
+.logout-btn:hover { background: rgba(200,50,50,0.32); }
+
+.contenido-admin {
+  margin-left: 260px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.topbar-admin {
+  background: var(--blanco);
+  border-bottom: 1px solid var(--borde-suave);
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.topbar-titulo {
+  font-family: var(--ff-display);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--texto-oscuro);
+  flex: 1;
+}
+
+.btn-hamburguesa {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  color: var(--azul-profundo);
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.main-admin {
+  padding: 32px 28px;
+  flex: 1;
+}
+
+.seccion-admin { display: none; }
+.seccion-admin.activa { display: block; }
+
+.kpi-card {
+  background: var(--blanco);
+  border: 1px solid var(--borde-suave);
+  border-radius: var(--r-card);
+  padding: 20px 24px;
+  box-shadow: var(--shadow-suave);
+}
+.kpi-card .valor {
+  font-family: var(--ff-display);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--azul-profundo);
+  line-height: 1.1;
+  margin-top: 6px;
+}
+
+.tabla-khanauky {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.tabla-khanauky thead tr {
+  background-color: var(--azul-profundo);
+  color: var(--blanco);
+}
+.tabla-khanauky thead th {
+  padding: 12px 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+}
+.tabla-khanauky tbody tr:nth-child(even) { background-color: #F7FAFA; }
+.tabla-khanauky tbody tr:hover { background-color: #EFF7FB; }
+.tabla-khanauky tbody td { padding: 11px 14px; border-bottom: 1px solid var(--borde-suave); vertical-align: middle; }
+
+.badge-estado {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: #E3F2FD;
+  color: #1565C0;
+}
+
+.punto-estado {
+  height: 10px;
+  width: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.badge-modalidad { font-size: 0.72rem; padding: 3px 9px; border-radius: var(--r-pill); font-weight: 700; }
+.badge-recojo { background: #FFF4E5; color: #8A5A12; }
+.badge-delivery { background: #E3F2FD; color: #1565C0; }
+
+.aviso-entrega { border-radius: var(--r-md); padding: 14px 16px; font-size: 0.88rem; margin-bottom: 18px; display: flex; gap: 10px; align-items: flex-start; }
+.aviso-recojo { background: #FFF4E5; color: #8A5A12; }
+.aviso-delivery { background: #E3F2FD; color: #1565C0; }
+
+.item-carrito {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px dashed var(--borde-suave);
+  gap: 12px;
+}
+.controles-cantidad {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.btn-cant {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid var(--azul-marca);
+  background: none;
+  color: var(--azul-marca);
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.btn-cant:hover { background: var(--azul-marca); color: white; }
+
+.tabs-reporte { display: flex; gap: 6px; margin-bottom: 18px; }
+.tab-reporte-btn { background: white; border: 1px solid var(--borde-suave); color: var(--texto-medio); padding: 8px 18px; border-radius: var(--r-pill); font-weight: 600; font-size: 0.85rem; cursor: pointer; }
+.tab-reporte-btn.activa { background: var(--azul-marca); color: white; border-color: var(--azul-marca); }
+
+.leyenda-estados { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.82rem; color: var(--texto-suave); margin-bottom: 18px; }
+.leyenda-estados span { display: flex; align-items: center; gap: 6px; }
+
+@media (max-width: 900px) {
+  .sidebar-admin {
+    transform: translateX(-100%);
+  }
+  .sidebar-admin.abierto {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0,0,0,0.25);
+  }
+  .contenido-admin { margin-left: 0; }
+  .btn-hamburguesa { display: block; }
+  .main-admin { padding: 20px 16px; }
+}
