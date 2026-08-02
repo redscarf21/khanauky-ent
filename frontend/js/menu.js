@@ -114,6 +114,10 @@ async function actualizarCarrito() {
     const aviso = resumen.modalidadSugerida === "delivery"
       ? `<span class="badge badge-delivery ms-2">Delivery</span>`
       : `<span class="badge badge-recojo ms-2">Recojo en tienda</span>`;
+    const badgeAnterior = totalSpan.nextElementSibling;
+    if (badgeAnterior && (badgeAnterior.classList.contains("badge-delivery") || badgeAnterior.classList.contains("badge-recojo"))) {
+      badgeAnterior.remove();
+    }
     totalSpan.insertAdjacentHTML("afterend", aviso);
 
     contador.textContent = carrito.reduce((t, p) => t + p.cantidad, 0);
