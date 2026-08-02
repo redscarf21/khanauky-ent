@@ -11,23 +11,15 @@ const CENTENAS = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "Q
 
 function convertirEntero(numero) {
   let letras = "";
-
   if (numero >= 1000) {
     const miles = Math.floor(numero / 1000);
     letras += miles === 1 ? "MIL " : convertirEntero(miles) + "MIL ";
     numero %= 1000;
   }
-
   if (numero >= 100) {
-    if (numero === 100) {
-      letras += "CIEN ";
-      numero = 0;
-    } else {
-      letras += CENTENAS[Math.floor(numero / 100)] + " ";
-      numero %= 100;
-    }
+    if (numero === 100) { letras += "CIEN "; numero = 0; }
+    else { letras += CENTENAS[Math.floor(numero / 100)] + " "; numero %= 100; }
   }
-
   if (numero >= 10 && numero <= 19) {
     letras += numero === 10 ? "DIEZ " : ESPECIALES[numero - 11] + " ";
     numero = 0;
@@ -39,11 +31,7 @@ function convertirEntero(numero) {
     numero %= 10;
     if (numero > 0) letras += "Y ";
   }
-
-  if (numero > 0 && numero < 10) {
-    letras += UNIDADES[numero] + " ";
-  }
-
+  if (numero > 0 && numero < 10) letras += UNIDADES[numero] + " ";
   return letras;
 }
 
@@ -54,63 +42,56 @@ function numeroALetras(monto) {
   return `${res}Y ${String(decimales).padStart(2, "0")}/100 SOLES`;
 }
 
-// La boleta mantiene el formato ticket térmico de toda la vida
 function generarBoleta(doc, pedido) {
-  const centerOpts = { width: 196, align: "center" };
+  const center = { width: 196, align: "center" };
 
-  doc.font("Courier-Bold").fontSize(13).text("INDUSTRIA KHANAUKY", centerOpts);
+  doc.font("Courier-Bold").fontSize(13).text("INDUSTRIA KHANAUKY", center);
   doc.moveDown(0.2);
-  doc.font("Courier").fontSize(8).text(`RUC: ${RUC_EMPRESA}`, centerOpts);
-  doc.text(`SUCURSAL: ${(pedido.sucursal || "Chao").toUpperCase()} - LA LIBERTAD`, centerOpts);
+  doc.font("Courier").fontSize(8)
+    .text(`RUC: ${RUC_EMPRESA}`, center)
+    .text(`${(pedido.direccion || "Chao, Virú, La Libertad").toUpperCase()}`, center);
   doc.moveDown(0.3);
-  doc.text("----------------------------------------", centerOpts);
-
-  doc.font("Courier-Bold").fontSize(9).text("BOLETA DE VENTA ELECTRÓNICA", centerOpts);
-  doc.text(`N° ${pedido.codigoOrden}`, centerOpts);
+  doc.text("----------------------------------------", center);
+  doc.font("Courier-Bold").fontSize(9).text("BOLETA DE VENTA ELECTRÓNICA", center);
+  doc.text(`N° ${pedido.codigoOrden}`, center);
   doc.font("Courier").fontSize(8);
-  doc.text("----------------------------------------", centerOpts);
-
+  doc.text("----------------------------------------", center);
   doc.moveDown(0.3);
-  const fechaHora = pedido.creadoEn || new Date().toLocaleString("es-PE", { timeZone: "America/Lima" });
-  doc.text(`Fecha  : ${fechaHora}`);
+  doc.text(`Fecha  : ${pedido.creadoEn}`);
   doc.text(`Cliente: ${pedido.cliente}`);
   if (pedido.dni) doc.text(`DNI    : ${pedido.dni}`);
   doc.text(`Tel.   : ${pedido.telefono || "-"}`);
-  doc.text("----------------------------------------", centerOpts);
-
+  doc.text("----------------------------------------", center);
   doc.moveDown(0.3);
   doc.font("Courier-Bold").text("DESCRIPCION");
   doc.font("Courier");
 
   (pedido.productos || []).forEach((item) => {
-    const subtotal = Number(item.subtotal || 0);
     doc.text(item.nombre);
-    doc.text(`  ${item.cantidad} x   S/ ${subtotal.toFixed(2)}`, { width: 196, align: "right" });
+    doc.text(`  ${item.cantidad} x S/ ${Number(item.precioUnitarioBase).toFixed(2)}`, { width: 196, align: "right" });
+    doc.text(`  Subtotal: S/ ${Number(item.subtotal).toFixed(2)}`, { width: 196, align: "right" });
   });
 
-  doc.text("----------------------------------------", centerOpts);
+  doc.text("----------------------------------------", center);
+  doc.moveDown(0.2);
 
   const precio = pedido.precio || {};
-  doc.moveDown(0.2);
-  doc.text(`OP. GRAVADAS:        S/ ${Number(precio.baseImponible).toFixed(2)}`);
-  if (precio.descuento) doc.text(`DESCUENTO:            S/ ${Number(precio.descuento).toFixed(2)}`);
-  doc.text(`IGV (18%):            S/ ${Number(precio.igv).toFixed(2)}`);
-  doc.font("Courier-Bold").text(`TOTAL A PAGAR:    S/ ${Number(precio.totalAPagar).toFixed(2)}`);
-
+  doc.text(`OP. GRAVADAS:    S/ ${Number(precio.baseImponible).toFixed(2)}`);
+  if (precio.descuento) doc.text(`DESCUENTO:       S/ ${Number(precio.descuento).toFixed(2)}`);
+  doc.text(`IGV (18%):       S/ ${Number(precio.igv).toFixed(2)}`);
+  doc.font("Courier-Bold").text(`TOTAL A PAGAR:   S/ ${Number(precio.totalAPagar).toFixed(2)}`);
   doc.moveDown(0.4);
   doc.font("Courier").text(`PAGO: ${(pedido.metodopago || "EFECTIVO").toUpperCase()}`);
   doc.font("Courier-Bold").fontSize(7).text(`SON: ${numeroALetras(Number(precio.totalAPagar))}`, { width: 196 });
-
   doc.moveDown(0.6);
-  doc.font("Courier").fontSize(8).text("¡Gracias por su compra!", centerOpts);
+  doc.font("Courier").fontSize(8).text("¡Gracias por su compra!", center);
 }
 
-// La factura usa formato A4, con RUC y razón social del cliente
 function generarFactura(doc, pedido) {
-  const margenIzq = 50;
-  const anchoUtil = 495;
+  const margen = 50;
+  const ancho = 495;
 
-  doc.font("Helvetica-Bold").fontSize(16).fillColor("#0B3D5C").text(RAZON_SOCIAL_EMPRESA, margenIzq, 50);
+  doc.font("Helvetica-Bold").fontSize(16).fillColor("#0B3D5C").text(RAZON_SOCIAL_EMPRESA, margen, 50);
   doc.font("Helvetica").fontSize(9).fillColor("#333333");
   doc.text(`RUC: ${RUC_EMPRESA}`);
   doc.text("Av. José Olaya Mz. F Lote 12, Urb. La Victoria, Chao, Virú, La Libertad");
@@ -119,73 +100,69 @@ function generarFactura(doc, pedido) {
   doc.font("Helvetica-Bold").fontSize(11).fillColor("#0B3D5C").text("FACTURA ELECTRÓNICA", 390, 60, { width: 145, align: "center" });
   doc.fontSize(13).text(pedido.codigoOrden, 390, 80, { width: 145, align: "center" });
 
-  doc.moveDown(2);
   let y = 140;
-  doc.moveTo(margenIzq, y).lineTo(margenIzq + anchoUtil, y).stroke("#cccccc");
+  doc.moveTo(margen, y).lineTo(margen + ancho, y).stroke("#cccccc");
   y += 12;
 
-  doc.font("Helvetica-Bold").fontSize(9).fillColor("#0B3D5C").text("DATOS DEL CLIENTE", margenIzq, y);
+  doc.font("Helvetica-Bold").fontSize(9).fillColor("#0B3D5C").text("DATOS DEL CLIENTE", margen, y);
   y += 16;
   doc.font("Helvetica").fontSize(9).fillColor("#333333");
-  doc.text(`Razón social: ${pedido.razonSocial || pedido.cliente}`, margenIzq, y); y += 14;
-  doc.text(`RUC: ${pedido.ruc || "-"}`, margenIzq, y); y += 14;
-  doc.text(`Dirección: ${pedido.direccion || "-"}`, margenIzq, y); y += 14;
-  doc.text(`Teléfono: ${pedido.telefono || "-"}`, margenIzq, y); y += 14;
-  const fechaHora = pedido.creadoEn || new Date().toLocaleString("es-PE", { timeZone: "America/Lima" });
-  doc.text(`Fecha de emisión: ${fechaHora}`, margenIzq, y); y += 14;
-  doc.text(`Sucursal: ${pedido.sucursal || "Chao"}`, margenIzq, y);
+  doc.text(`Razón social: ${pedido.razonSocial || pedido.cliente}`, margen, y); y += 14;
+  doc.text(`RUC: ${pedido.ruc || "-"}`, margen, y); y += 14;
+  doc.text(`Dirección: ${pedido.direccion || "-"}`, margen, y); y += 14;
+  doc.text(`Teléfono: ${pedido.telefono || "-"}`, margen, y); y += 14;
+  doc.text(`Fecha de emisión: ${pedido.creadoEn}`, margen, y);
 
   y += 26;
-  doc.moveTo(margenIzq, y).lineTo(margenIzq + anchoUtil, y).stroke("#cccccc");
+  doc.moveTo(margen, y).lineTo(margen + ancho, y).stroke("#cccccc");
   y += 14;
 
-  doc.rect(margenIzq, y, anchoUtil, 22).fill("#0B3D5C");
+  doc.rect(margen, y, ancho, 22).fill("#0B3D5C");
   doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(9);
-  doc.text("DESCRIPCIÓN", margenIzq + 10, y + 6);
-  doc.text("CANT.", margenIzq + 290, y + 6, { width: 60, align: "right" });
-  doc.text("P. UNIT.", margenIzq + 350, y + 6, { width: 60, align: "right" });
-  doc.text("SUBTOTAL", margenIzq + 410, y + 6, { width: 75, align: "right" });
+  doc.text("DESCRIPCIÓN", margen + 10, y + 6);
+  doc.text("CANT.", margen + 290, y + 6, { width: 60, align: "right" });
+  doc.text("P. UNIT.", margen + 350, y + 6, { width: 60, align: "right" });
+  doc.text("SUBTOTAL", margen + 410, y + 6, { width: 75, align: "right" });
   y += 22;
 
   doc.font("Helvetica").fontSize(9).fillColor("#333333");
   (pedido.productos || []).forEach((item, idx) => {
-    const alturaFila = 20;
-    if (idx % 2 === 1) doc.rect(margenIzq, y, anchoUtil, alturaFila).fill("#F7FAFA");
+    const h = 20;
+    if (idx % 2 === 1) doc.rect(margen, y, ancho, h).fill("#F7FAFA");
     doc.fillColor("#333333");
-    doc.text(item.nombre, margenIzq + 10, y + 5);
-    doc.text(String(item.cantidad), margenIzq + 290, y + 5, { width: 60, align: "right" });
-    doc.text(`S/ ${Number(item.precioUnitarioBase || 0).toFixed(2)}`, margenIzq + 350, y + 5, { width: 60, align: "right" });
-    doc.text(`S/ ${Number(item.subtotal || 0).toFixed(2)}`, margenIzq + 410, y + 5, { width: 75, align: "right" });
-    y += alturaFila;
+    doc.text(item.nombre, margen + 10, y + 5);
+    doc.text(String(item.cantidad), margen + 290, y + 5, { width: 60, align: "right" });
+    doc.text(`S/ ${Number(item.precioUnitarioBase).toFixed(2)}`, margen + 350, y + 5, { width: 60, align: "right" });
+    doc.text(`S/ ${Number(item.subtotal).toFixed(2)}`, margen + 410, y + 5, { width: 75, align: "right" });
+    y += h;
   });
 
   y += 10;
-  doc.moveTo(margenIzq + 280, y).lineTo(margenIzq + anchoUtil, y).stroke("#cccccc");
+  doc.moveTo(margen + 280, y).lineTo(margen + ancho, y).stroke("#cccccc");
   y += 10;
 
   const precio = pedido.precio || {};
-  const filaTotales = (etiqueta, valor, negrita = false) => {
+  const filaTotal = (etiqueta, valor, negrita = false) => {
     doc.font(negrita ? "Helvetica-Bold" : "Helvetica").fontSize(negrita ? 11 : 9.5);
-    doc.text(etiqueta, margenIzq + 280, y, { width: 130, align: "left" });
-    doc.text(`S/ ${Number(valor).toFixed(2)}`, margenIzq + 410, y, { width: 75, align: "right" });
+    doc.text(etiqueta, margen + 280, y, { width: 130, align: "left" });
+    doc.text(`S/ ${Number(valor).toFixed(2)}`, margen + 410, y, { width: 75, align: "right" });
     y += negrita ? 20 : 16;
   };
 
-  filaTotales("Operación gravada:", precio.baseImponible);
-  if (precio.descuento) filaTotales("Descuento:", precio.descuento);
-  filaTotales("IGV (18%):", precio.igv);
+  filaTotal("Operación gravada:", precio.baseImponible);
+  if (precio.descuento) filaTotal("Descuento:", precio.descuento);
+  filaTotal("IGV (18%):", precio.igv);
   doc.fillColor("#0B3D5C");
-  filaTotales("TOTAL A PAGAR:", precio.totalAPagar, true);
+  filaTotal("TOTAL A PAGAR:", precio.totalAPagar, true);
   doc.fillColor("#333333");
 
   y += 10;
-  doc.font("Helvetica-Oblique").fontSize(9).text(`Son: ${numeroALetras(Number(precio.totalAPagar))}`, margenIzq, y, { width: anchoUtil });
+  doc.font("Helvetica-Oblique").fontSize(9).text(`Son: ${numeroALetras(Number(precio.totalAPagar))}`, margen, y, { width: ancho });
   y += 16;
-  doc.text(`Forma de pago: ${(pedido.metodopago || "Efectivo").toUpperCase()}`, margenIzq, y);
-
+  doc.text(`Forma de pago: ${(pedido.metodopago || "Efectivo").toUpperCase()}`, margen, y);
   y += 40;
-  doc.font("Helvetica").fontSize(8).fillColor("#888888");
-  doc.text("Representación impresa de la Factura Electrónica. Gracias por su compra.", margenIzq, y, { width: anchoUtil, align: "center" });
+  doc.font("Helvetica").fontSize(8).fillColor("#888888")
+    .text("Representación impresa de la Factura Electrónica. Gracias por su compra.", margen, y, { width: ancho, align: "center" });
 }
 
 export function generarComprobantePDF(res, pedido, tipoComprobante = "boleta") {
@@ -199,12 +176,6 @@ export function generarComprobantePDF(res, pedido, tipoComprobante = "boleta") {
   res.setHeader("Content-Disposition", `inline; filename="${nombreArchivo}"`);
 
   doc.pipe(res);
-
-  if (esFactura) {
-    generarFactura(doc, pedido);
-  } else {
-    generarBoleta(doc, pedido);
-  }
-
+  esFactura ? generarFactura(doc, pedido) : generarBoleta(doc, pedido);
   doc.end();
 }
