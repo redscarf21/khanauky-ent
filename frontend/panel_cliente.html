@@ -15,10 +15,26 @@
     .hero-perfil { background: linear-gradient(160deg, var(--azul-profundo), var(--azul-marca)); color: white; padding: 50px 0; }
     .hero-perfil h2 { color: white; margin-bottom: 4px; }
     .badge-estado { padding: 6px 14px; border-radius: var(--r-pill); font-size: 0.78rem; font-weight: 700; }
-    .estado-Venta-Registrada { background: #FDECEC; color: #C53030; }
-    .estado-Venta-Exitosa { background: #E6F4EA; color: #2E7D32; }
-    .estado-Entrega-Pendiente { background: #E3F2FD; color: #1565C0; }
-    .estado-Venta-Entregada { background: #F3E8FD; color: #7B1FA2; }
+    .estado-Pendiente { background: #E3F2FD; color: #1565C0; }
+    .estado-En-Proceso-de-Llenado { background: #FFF4E5; color: #8A5A12; }
+    .estado-Listo-para-Despacho { background: #E0F7FA; color: #00838F; }
+    .estado-En-Ruta-de-Entrega { background: #E3F2FD; color: #1565C0; }
+    .estado-Entregado { background: #E6F4EA; color: #2E7D32; }
+    .estado-Facturado { background: #E6F4EA; color: #2E7D32; }
+    .estado-Cancelado { background: #FDECEC; color: #C53030; }
+    .estado-Devuelto-por-Defecto { background: #FDECEC; color: #C53030; }
+
+    .stepper-pedido { display: flex; align-items: center; margin: 14px 0 4px; }
+    .stepper-paso { flex: 1; text-align: center; position: relative; }
+    .stepper-paso .punto { width: 20px; height: 20px; border-radius: 50%; background: var(--borde-suave); margin: 0 auto 4px; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.65rem; }
+    .stepper-paso.completado .punto { background: var(--azul-marca); }
+    .stepper-paso.actual .punto { background: var(--ambar); box-shadow: 0 0 0 4px rgba(232,144,46,0.2); }
+    .stepper-paso .linea { position: absolute; top: 10px; left: -50%; width: 100%; height: 2px; background: var(--borde-suave); z-index: -1; }
+    .stepper-paso:first-child .linea { display: none; }
+    .stepper-paso.completado .linea { background: var(--azul-marca); }
+    .stepper-paso .etiqueta { font-size: 0.68rem; color: var(--texto-suave); }
+    .stepper-paso.actual .etiqueta { color: var(--ambar-oscuro); font-weight: 700; }
+    .info-entrega-pedido { background: var(--fondo); border-radius: var(--r-sm); padding: 10px 14px; font-size: 0.82rem; margin-top: 10px; }
     .pedido-card { border: 1px solid var(--borde-suave); border-radius: var(--r-md); padding: 18px 20px; margin-bottom: 14px; }
   </style>
 </head>

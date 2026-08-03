@@ -112,6 +112,7 @@
       <button class="menu-btn" data-target="sec-factura"><i class="bi bi-receipt"></i> Generar comprobante</button>
       <button class="menu-btn" data-target="sec-lotes"><i class="bi bi-box-seam"></i> Lotes de producción</button>
       <button class="menu-btn" data-target="sec-transportes"><i class="bi bi-truck"></i> Transportes</button>
+      <button class="menu-btn" data-target="sec-entregas"><i class="bi bi-signpost-split"></i> Entregas</button>
       <button class="menu-btn" data-target="sec-sucursales"><i class="bi bi-geo-alt"></i> Zonas / Ingresos</button>
       <button class="menu-btn" data-target="sec-clientes"><i class="bi bi-people"></i> Clientes</button>
       <button class="menu-btn" data-target="sec-empleados"><i class="bi bi-person-badge"></i> Empleados</button>
@@ -360,6 +361,20 @@
 
           <h5 class="mb-3">Transportes registrados</h5>
           <div id="tablaTransportes">Cargando...</div>
+        </section>
+
+        <!-- ENTREGAS -->
+        <section id="sec-entregas" class="seccion-admin">
+          <h4 class="mb-1">Entregas</h4>
+          <p class="text-mid small mb-4">Agrupadas por distrito. Reasigna el transporte o registra hora de
+            salida/entrega.</p>
+
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="soloPendientesEntregas" checked>
+            <label class="form-check-label small" for="soloPendientesEntregas">Mostrar solo entregas pendientes</label>
+          </div>
+
+          <div id="tablaEntregas">Cargando...</div>
         </section>
 
         <!-- ZONAS / INGRESOS -->

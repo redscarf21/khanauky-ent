@@ -37,6 +37,28 @@ async function cargarPerfil() {
   }
 }
 
+const PASOS_SEGUIMIENTO = ["Pendiente", "En Proceso de Llenado", "Listo para Despacho", "En Ruta de Entrega", "Entregado"];
+const ESTADOS_FINALIZADOS_SIN_STEPPER = ["Cancelado", "Devuelto por Defecto", "Facturado"];
+
+function construirStepper(estadoActual) {
+  if (ESTADOS_FINALIZADOS_SIN_STEPPER.includes(estadoActual)) return "";
+
+  const indiceActual = PASOS_SEGUIMIENTO.indexOf(estadoActual);
+  if (indiceActual === -1) return "";
+
+  return `<div class="stepper-pedido">` +
+    PASOS_SEGUIMIENTO.map((paso, i) => {
+      const clase = i < indiceActual ? "completado" : i === indiceActual ? "actual" : "";
+      return `
+        <div class="stepper-paso ${clase}">
+          <div class="linea"></div>
+          <div class="punto">${i < indiceActual ? '<i class="bi bi-check"></i>' : ""}</div>
+          <div class="etiqueta">${paso}</div>
+        </div>`;
+    }).join("") +
+    `</div>`;
+}
+
 async function cargarPedidos() {
   const contenedor = document.getElementById("listaPedidos");
   try {
@@ -51,25 +73,36 @@ async function cargarPedidos() {
       const claseEstado = "estado-" + p.estado.replace(/ /g, "-");
       const saldoPendiente = Number(p.saldo_pendiente || 0);
 
+      const infoEntrega = p.direccion_entrega ? `
+        <div class="info-entrega-pedido">
+          <i class="bi bi-geo-alt me-1"></i>${p.direccion_entrega}
+          ${p.hora_salida ? `<br><i class="bi bi-truck me-1"></i>Salió a las ${p.hora_salida.slice(0,5)}` : ""}
+          ${p.hora_entrega ? `<br><i class="bi bi-check-circle me-1"></i>Entregado a las ${p.hora_entrega.slice(0,5)}` : ""}
+        </div>` : "";
+
       return `
-        <div class="pedido-card d-flex flex-wrap justify-content-between align-items-center gap-2">
-          <div>
-            <strong>${p.codigo_orden}</strong>
-            <span class="badge-estado ${claseEstado} ms-2">${p.estado}</span>
-            <div class="small text-mid mt-1">
-              ${new Date(p.fecha_pedido).toLocaleDateString("es-PE")} ·
-              S/ ${Number(p.total_pago).toFixed(2)}
-              ${saldoPendiente > 0
-                ? `<span class="text-danger ms-2">· Saldo pendiente: S/ ${saldoPendiente.toFixed(2)}</span>`
-                : ""}
+        <div class="pedido-card">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+              <strong>${p.codigo_orden}</strong>
+              <span class="badge-estado ${claseEstado} ms-2">${p.estado}</span>
+              <div class="small text-mid mt-1">
+                ${new Date(p.fecha_pedido).toLocaleDateString("es-PE")} ·
+                S/ ${Number(p.total_pago).toFixed(2)}
+                ${saldoPendiente > 0
+                  ? `<span class="text-danger ms-2">· Saldo pendiente: S/ ${saldoPendiente.toFixed(2)}</span>`
+                  : ""}
+              </div>
+              ${p.tipo_comprobante ? `<span class="small text-mid">${p.tipo_comprobante}</span>` : ""}
             </div>
-            ${p.tipo_comprobante ? `<span class="small text-mid">${p.tipo_comprobante}</span>` : ""}
+            <a class="btn-khanauky-outline btn-sm"
+               href="/api/pedidos/${p.codigo_orden}/comprobante"
+               target="_blank">
+              <i class="bi bi-receipt"></i> Ver ${p.tipo_comprobante === "Factura" ? "factura" : "boleta"}
+            </a>
           </div>
-          <a class="btn-khanauky-outline btn-sm"
-             href="/api/pedidos/${p.codigo_orden}/comprobante"
-             target="_blank">
-            <i class="bi bi-receipt"></i> Ver ${p.tipo_comprobante === "Factura" ? "factura" : "boleta"}
-          </a>
+          ${construirStepper(p.estado)}
+          ${infoEntrega}
         </div>`;
     }).join("");
   } catch (err) {

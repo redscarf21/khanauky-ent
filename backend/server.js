@@ -10,7 +10,7 @@ import { fileURLToPath } from "url";
 import { pool, query, iniciarBD, generarCodigoOrden, conTransaccion } from "./db.js";
 import { calcularResumenVenta } from "./precios.js";
 import { asignarLotesFEFO } from "./inventario.js";
-import { firmarToken, requiereSesion, requiereRol, requiereAdminPrincipal } from "./auth.js";
+import { firmarToken, requiereSesion, requiereRol, requiereAdminPrincipal, obtenerUsuarioOpcional } from "./auth.js";
 import { verificarRecaptcha } from "./recaptcha.js";
 import { generarComprobantePDF } from "./factura.js";
 import {
@@ -270,13 +270,14 @@ app.post("/api/logout", (req, res) => {
 app.get("/api/productos", async (req, res) => {
   try {
     let tipoCliente = "PERSONA";
-    if (req.cookies?.sesion) {
+    const usuarioSesion = obtenerUsuarioOpcional(req);
+    if (usuarioSesion) {
       try {
         const { rows } = await query(
           `SELECT c.tipo_cliente FROM usuarios u
            JOIN cliente c ON c.usuario_id = u.id
            WHERE u.id = $1`,
-          [req.usuario?.id]
+          [usuarioSesion.id]
         );
         if (rows[0]) tipoCliente = rows[0].tipo_cliente;
       } catch { }
@@ -963,19 +964,43 @@ app.get("/api/deliveries", requiereRol("empleado"), async (req, res) => {
     const { rows } = await query(`
       SELECT d.*,
              ub.distrito, ub.provincia,
-             t.modelo_transporte,
+             t.transporte_id, t.modelo_transporte,
              tt.descripcion AS tipo_transporte,
-             p.codigo_orden
+             p.codigo_orden, p.estado_id,
+             ep.descripcion AS estado_pedido,
+             CASE WHEN c.tipo_cliente = 'PERSONA'
+               THEN pe.nombres || ' ' || pe.apellidos
+               ELSE em.razon_social
+             END AS cliente_nombre,
+             c.telefono
       FROM delivery d
       JOIN ubigeo ub ON ub.ubigeo_id = d.ubigeo_id
       JOIN transporte t ON t.transporte_id = d.transporte_id
       JOIN tipo_transporte tt ON tt.tipo_id = t.tipo_id
       LEFT JOIN pedido p ON p.delivery_id = d.delivery_id
-      ORDER BY d.fecha DESC
+      LEFT JOIN estado_pedido ep ON ep.estado_id = p.estado_id
+      LEFT JOIN cliente c ON c.cliente_id = p.cliente_id
+      LEFT JOIN persona pe ON pe.cliente_id = c.cliente_id
+      LEFT JOIN empresa em ON em.cliente_id = c.cliente_id
+      ORDER BY ub.distrito, d.fecha DESC
     `);
     res.json(rows);
   } catch (error) {
     res.status(500).json({ error: "Error al obtener deliveries." });
+  }
+});
+
+app.patch("/api/deliveries/:id/transporte", requiereRol("empleado"), async (req, res) => {
+  try {
+    const { transporteId } = req.body;
+    const { rows } = await query(
+      `UPDATE delivery SET transporte_id = $1 WHERE delivery_id = $2 RETURNING delivery_id`,
+      [transporteId, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: "Delivery no encontrado." });
+    res.json({ mensaje: "Transporte reasignado." });
+  } catch (error) {
+    res.status(500).json({ error: "Error al reasignar transporte." });
   }
 });
 

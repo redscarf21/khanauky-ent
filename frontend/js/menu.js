@@ -31,9 +31,15 @@ function renderizarProductos() {
           </div>
           <h5 class="mb-1">${prod.nombre_producto}</h5>
           <p class="text-mid small mb-2">${prod.descripcion || ""}</p>
-          <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-1">
             <span class="fw-bold fs-5 text-azul-marca">S/ ${Number(prod.precio).toFixed(2)}</span>
             <span class="small text-mid">${prod.capacidad}</span>
+          </div>
+          <div class="mb-3">
+            ${prod.tipoCliente === "EMPRESA"
+              ? `<span class="badge bg-light text-azul-marca border border-azul-marca small"><i class="bi bi-building me-1"></i>Precio empresa aplicado</span>`
+              : `<span class="small text-ambar"><i class="bi bi-box-seam me-1"></i>Precio por mayor (cuenta empresa): S/ ${Number(prod.precio_mayorista).toFixed(2)}</span>`
+            }
           </div>
           <button class="btn-khanauky-primario w-100" data-id="${prod.producto_id}" ${sinStock ? "disabled" : ""}>
             <i class="bi bi-plus-circle me-1"></i> Agregar al carrito

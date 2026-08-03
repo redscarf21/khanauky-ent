@@ -23,6 +23,19 @@ export function requiereSesion(req, res, next) {
   }
 }
 
+// Igual que requiereSesion, pero para rutas públicas que solo quieren
+// personalizar la respuesta SI hay sesión activa, sin bloquear a
+// quienes no han iniciado sesión (ej. catálogo público).
+export function obtenerUsuarioOpcional(req) {
+  const token = req.cookies?.sesion;
+  if (!token) return null;
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+}
+
 export function requiereRol(rolEsperado) {
   return (req, res, next) => {
     requiereSesion(req, res, () => {
