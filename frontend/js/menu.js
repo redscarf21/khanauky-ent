@@ -100,6 +100,7 @@ async function actualizarCarrito() {
             <button class="btn-cant" data-id="${item.producto_id}" data-cambio="-1">−</button>
             <span>${item.cantidad}</span>
             <button class="btn-cant" data-id="${item.producto_id}" data-cambio="1">+</button>
+            <button class="btn-cant btn-eliminar-item" data-eliminar="${item.producto_id}" title="Quitar del carrito"><i class="bi bi-trash"></i></button>
           </div>
         </div>`;
     });
@@ -108,6 +109,10 @@ async function actualizarCarrito() {
       btn.addEventListener("click", () =>
         cambiarCantidad(parseInt(btn.dataset.id), parseInt(btn.dataset.cambio))
       );
+    });
+
+    lista.querySelectorAll("button[data-eliminar]").forEach((btn) => {
+      btn.addEventListener("click", () => eliminarDelCarrito(parseInt(btn.dataset.eliminar)));
     });
 
     totalSpan.textContent = `S/ ${resumen.totalAPagar.toFixed(2)}`;
@@ -132,6 +137,11 @@ function cambiarCantidad(id, cambio) {
   if (!item) return;
   item.cantidad += cambio;
   if (item.cantidad <= 0) carrito = carrito.filter((i) => i.producto_id !== id);
+  actualizarCarrito();
+}
+
+function eliminarDelCarrito(id) {
+  carrito = carrito.filter((i) => i.producto_id !== id);
   actualizarCarrito();
 }
 

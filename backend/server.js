@@ -778,9 +778,9 @@ app.get("/api/pedidos/buscar/:dato", requiereRol("empleado"), async (req, res) =
   try {
     const dato = req.params.dato;
     const { rows } = await query(`
-      SELECT p.codigo_orden, p.fecha_pedido,
+      SELECT p.codigo_orden, p.fecha_pedido, p.estado_id,
              ep.descripcion AS estado,
-             v.total_pago, v.saldo_pendiente,
+             v.venta_id, v.total_pago, v.saldo_pendiente, v.descuento_aplicado,
              CASE WHEN c.tipo_cliente = 'PERSONA'
                THEN pe.nombres || ' ' || pe.apellidos
                ELSE em.razon_social
@@ -864,6 +864,25 @@ app.post("/api/lotes", requiereRol("empleado"), async (req, res) => {
     res.status(201).json(rows[0]);
   } catch (error) {
     res.status(500).json({ error: "Error al crear lote." });
+  }
+});
+
+app.patch("/api/lotes/:id", requiereRol("empleado"), async (req, res) => {
+  try {
+    const { unidadesDisponibles, estado, fechaVencimiento } = req.body;
+    const { rows } = await query(
+      `UPDATE produccion_lotes
+       SET unidades_disponibles = COALESCE($1, unidades_disponibles),
+           estado = COALESCE($2, estado),
+           fecha_vencimiento = COALESCE($3, fecha_vencimiento)
+       WHERE lote_id = $4
+       RETURNING *`,
+      [unidadesDisponibles, estado, fechaVencimiento, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: "Lote no encontrado." });
+    res.json(rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: "Error al actualizar el lote." });
   }
 });
 

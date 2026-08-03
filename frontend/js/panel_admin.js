@@ -214,22 +214,97 @@ async function cargarReporteMensual() {
 
 document.getElementById("btnBuscarDni").addEventListener("click", async () => {
   const dato = document.getElementById("inputDni").value.trim();
-  const cont = document.getElementById("resultadoBusqueda");
   if (!dato) return;
+  await buscarYRenderizarPedidos(dato);
+});
+
+async function buscarYRenderizarPedidos(dato) {
+  const cont = document.getElementById("resultadoBusqueda");
   try {
     const resultados = await Api.get(`/api/pedidos/buscar/${encodeURIComponent(dato)}`);
     if (resultados.length === 0) {
       cont.innerHTML = `<p class="text-mid">No se encontraron pedidos.</p>`;
       return;
     }
-    cont.innerHTML = `<ul class="list-group">` +
-      resultados.map((p) =>
-        `<li class="list-group-item">${p.codigo_orden} — ${p.cliente_nombre} — S/ ${Number(p.total_pago).toFixed(2)} — ${p.estado}</li>`
-      ).join("") + `</ul>`;
+
+    const opcionesMetodoPago = metodosPago.map((m) =>
+      `<option value="${m.metodo_pago_id}">${m.descripcion}</option>`).join("");
+    const opcionesEstado = estadosPedido.map((e) =>
+      `<option value="${e.estado_id}">${e.descripcion}</option>`).join("");
+
+    cont.innerHTML = resultados.map((p) => {
+      const saldo = Number(p.saldo_pendiente || 0);
+      const fecha = p.fecha_pedido ? new Date(p.fecha_pedido).toLocaleDateString("es-PE") : "-";
+      return `
+      <div class="card-khanauky p-3 mb-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+          <div>
+            <strong>${p.codigo_orden}</strong> — ${p.cliente_nombre}
+            <div class="small text-mid">${fecha} · Total: S/ ${Number(p.total_pago || 0).toFixed(2)}
+              ${saldo > 0
+                ? `· <span class="text-danger fw-semibold">Saldo pendiente: S/ ${saldo.toFixed(2)}</span>`
+                : `· <span class="text-success fw-semibold">Pagado completo</span>`}
+            </div>
+          </div>
+          <select class="form-select form-select-sm" style="width:auto;" data-cambiar-estado="${p.codigo_orden}">
+            ${estadosPedido.map((e) =>
+              `<option value="${e.estado_id}" ${e.estado_id === p.estado_id ? "selected" : ""}>${e.descripcion}</option>`
+            ).join("")}
+          </select>
+        </div>
+        ${p.venta_id && saldo > 0 ? `
+          <div class="d-flex flex-wrap gap-2 align-items-end border-top pt-2 mt-2">
+            <div>
+              <label class="form-label small mb-1">Monto del abono</label>
+              <input type="number" min="0.01" max="${saldo}" step="0.01" class="form-control form-control-sm" style="width:130px;" data-monto-abono="${p.venta_id}" placeholder="S/ 0.00">
+            </div>
+            <div>
+              <label class="form-label small mb-1">Método de pago</label>
+              <select class="form-select form-select-sm" style="width:150px;" data-metodo-abono="${p.venta_id}">${opcionesMetodoPago}</select>
+            </div>
+            <button class="btn-khanauky-outline btn-sm" data-registrar-abono="${p.venta_id}">Registrar abono</button>
+          </div>` : ""}
+      </div>`;
+    }).join("");
+
+    cont.querySelectorAll("select[data-cambiar-estado]").forEach((sel) => {
+      sel.addEventListener("change", async () => {
+        try {
+          await Api.patch(`/api/pedidos/${sel.dataset.cambiarEstado}/estado`, { estadoId: parseInt(sel.value) });
+          await buscarYRenderizarPedidos(dato);
+        } catch (err) {
+          alert("Error al actualizar el estado: " + err.message);
+        }
+      });
+    });
+
+    cont.querySelectorAll("button[data-registrar-abono]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const ventaId = btn.dataset.registrarAbono;
+        const inputMonto = cont.querySelector(`input[data-monto-abono="${ventaId}"]`);
+        const selectMetodo = cont.querySelector(`select[data-metodo-abono="${ventaId}"]`);
+        const monto = parseFloat(inputMonto.value);
+
+        if (!monto || monto <= 0) {
+          alert("Ingresa un monto válido para el abono.");
+          return;
+        }
+
+        try {
+          await Api.post(`/api/ventas/${ventaId}/pago-parcial`, {
+            metodoPagoId: parseInt(selectMetodo.value),
+            monto
+          });
+          await buscarYRenderizarPedidos(dato);
+        } catch (err) {
+          alert("Error al registrar el abono: " + err.message);
+        }
+      });
+    });
   } catch (err) {
     cont.innerHTML = `<p class="text-danger">${err.message}</p>`;
   }
-});
+}
 
 document.getElementById("btnListarFacturas").addEventListener("click", async () => {
   const cont = document.getElementById("listaFacturas");
@@ -403,8 +478,9 @@ async function cargarLotes() {
       cont.innerHTML = `<p class="text-mid">No hay lotes registrados.</p>`;
       return;
     }
+    const opcionesEstadoLote = ["Disponible", "Agotado", "Dañado / no vendible", "Retirado"];
     cont.innerHTML = `<div class="table-responsive"><table class="tabla-khanauky"><thead><tr>
-      <th>Producto</th><th>Fecha prod.</th><th>Producidas</th><th>Disponibles</th><th>Vence</th><th>Estado</th></tr></thead><tbody>` +
+      <th>Producto</th><th>Fecha prod.</th><th>Producidas</th><th>Disponibles</th><th>Vence</th><th>Estado</th><th></th></tr></thead><tbody>` +
       lotes.map((l) => {
         const vence = new Date(l.fecha_vencimiento);
         const hoy = new Date();
@@ -414,12 +490,34 @@ async function cargarLotes() {
           <td>${l.nombre_producto}</td>
           <td>${new Date(l.fecha_produccion).toLocaleDateString("es-PE")}</td>
           <td>${l.unidades_producidas}</td>
-          <td><strong>${l.unidades_disponibles}</strong></td>
+          <td><input type="number" min="0" class="form-control form-control-sm" style="width:90px;" data-disp="${l.lote_id}" value="${l.unidades_disponibles}"></td>
           <td class="${alertaVenc}">${vence.toLocaleDateString("es-PE")}</td>
-          <td>${l.estado}</td>
+          <td>
+            <select class="form-select form-select-sm" style="width:auto;" data-estado="${l.lote_id}">
+              ${opcionesEstadoLote.map((e) => `<option value="${e}" ${e === l.estado ? "selected" : ""}>${e}</option>`).join("")}
+            </select>
+          </td>
+          <td><button class="btn btn-sm btn-outline-secondary" data-guardar-lote="${l.lote_id}">Guardar</button></td>
         </tr>`;
       }).join("") +
       `</tbody></table></div>`;
+
+    cont.querySelectorAll("button[data-guardar-lote]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.guardarLote;
+        const inputDisp = cont.querySelector(`input[data-disp="${id}"]`);
+        const selEstado = cont.querySelector(`select[data-estado="${id}"]`);
+        try {
+          await Api.patch(`/api/lotes/${id}`, {
+            unidadesDisponibles: parseInt(inputDisp.value),
+            estado: selEstado.value
+          });
+          cargarLotes();
+        } catch (err) {
+          alert("Error al actualizar el lote: " + err.message);
+        }
+      });
+    });
   } catch (err) {
     cont.innerHTML = `<p class="text-danger">${err.message}</p>`;
   }
