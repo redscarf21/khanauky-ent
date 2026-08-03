@@ -21,6 +21,24 @@ export async function query(texto, valores) {
   return pool.query(texto, valores);
 }
 
+// Ejecuta varias queries como una sola transacción atómica: si algo falla
+// a la mitad, se revierte todo (ROLLBACK). Úsalo para cualquier operación
+// que escriba en más de una tabla relacionada (ej. registrar una venta).
+export async function conTransaccion(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const resultado = await callback(client);
+    await client.query("COMMIT");
+    return resultado;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export function generarCodigoOrden() {
   const letras = "BCDFGHJKLMNPQRSTVWXYZ";
   const l1 = letras[Math.floor(Math.random() * letras.length)];

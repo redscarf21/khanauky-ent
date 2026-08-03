@@ -7,8 +7,9 @@ import bcrypt from "bcryptjs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { pool, query, iniciarBD, generarCodigoOrden } from "./db.js";
+import { pool, query, iniciarBD, generarCodigoOrden, conTransaccion } from "./db.js";
 import { calcularResumenVenta } from "./precios.js";
+import { asignarLotesFEFO } from "./inventario.js";
 import { firmarToken, requiereSesion, requiereRol, requiereAdminPrincipal } from "./auth.js";
 import { verificarRecaptcha } from "./recaptcha.js";
 import { generarComprobantePDF } from "./factura.js";
@@ -419,75 +420,70 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
     const tipoCliente = await getTipoCliente(req.usuario.id);
 
     const { rows: productosDB } = await query(
-      `SELECT p.*, pl.lote_id, pl.unidades_disponibles
-       FROM producto p
-       LEFT JOIN produccion_lotes pl ON pl.producto_id = p.producto_id
-         AND pl.estado = 'Disponible'
-         AND pl.fecha_vencimiento >= CURRENT_DATE
-       WHERE p.producto_id = ANY($1)`,
+      `SELECT * FROM producto WHERE producto_id = ANY($1)`,
       [items.map((i) => i.producto_id)]
     );
 
     const itemsConPrecio = items.map((item) => {
       const prod = productosDB.find((p) => p.producto_id === item.producto_id);
       if (!prod) throw new Error(`Producto ${item.producto_id} no encontrado.`);
-      if (!prod.lote_id) throw new Error(`Sin stock disponible para ${prod.nombre_producto}.`);
       return { ...prod, cantidad: item.cantidad };
     });
 
     const resumen = calcularResumenVenta(itemsConPrecio, tipoCliente);
     const codigoOrden = generarCodigoOrden();
 
-    const { rows: estadoRows } = await query(
-      `SELECT estado_id FROM estado_pedido WHERE descripcion = 'Pendiente'`
-    );
-    const estadoId = estadoRows[0]?.estado_id;
-
-    let deliveryId = null;
-    if (resumen.modalidadSugerida === "delivery" && ubigeoId) {
-      const { rows: delRows } = await query(
-        `INSERT INTO delivery (direccion_entrega, ubigeo_id, transporte_id)
-         VALUES ($1, $2, (SELECT transporte_id FROM transporte WHERE estado_transporte_id =
-           (SELECT estado_transporte_id FROM estado_transporte WHERE descripcion = 'Operativo')
-           LIMIT 1))
-         RETURNING delivery_id`,
-        [direccionEntrega || "", ubigeoId]
+    await conTransaccion(async (client) => {
+      const { rows: estadoRows } = await client.query(
+        `SELECT estado_id FROM estado_pedido WHERE descripcion = 'Pendiente'`
       );
-      deliveryId = delRows[0]?.delivery_id || null;
-    }
+      const estadoId = estadoRows[0]?.estado_id;
 
-    const { rows: pedidoRows } = await query(
-      `INSERT INTO pedido (codigo_orden, cliente_id, estado_id, delivery_id)
-       VALUES ($1,$2,$3,$4) RETURNING pedido_id, codigo_orden`,
-      [codigoOrden, clienteId, estadoId, deliveryId]
-    );
-    const pedidoId = pedidoRows[0].pedido_id;
+      let deliveryId = null;
+      if (resumen.modalidadSugerida === "delivery" && ubigeoId) {
+        const { rows: delRows } = await client.query(
+          `INSERT INTO delivery (direccion_entrega, ubigeo_id, transporte_id)
+           VALUES ($1, $2, (SELECT transporte_id FROM transporte WHERE estado_transporte_id =
+             (SELECT estado_transporte_id FROM estado_transporte WHERE descripcion = 'Operativo')
+             LIMIT 1))
+           RETURNING delivery_id`,
+          [direccionEntrega || "", ubigeoId]
+        );
+        deliveryId = delRows[0]?.delivery_id || null;
+      }
 
-    for (const item of resumen.detalle) {
-      await query(
-        `INSERT INTO detalle_pedido (pedido_id, producto_id, lote_id, cantidad, precio, sub_total)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
-        [pedidoId, item.producto_id, item.lote_id, item.cantidad, item.precioUnitario, item.subTotal]
+      const { rows: pedidoRows } = await client.query(
+        `INSERT INTO pedido (codigo_orden, cliente_id, estado_id, delivery_id)
+         VALUES ($1,$2,$3,$4) RETURNING pedido_id`,
+        [codigoOrden, clienteId, estadoId, deliveryId]
       );
-      await query(
-        `UPDATE produccion_lotes SET unidades_disponibles = unidades_disponibles - $1
-         WHERE lote_id = $2`,
-        [item.cantidad, item.lote_id]
+      const pedidoId = pedidoRows[0].pedido_id;
+
+      for (const item of resumen.detalle) {
+        const asignaciones = await asignarLotesFEFO(client, item.producto_id, item.nombre, item.cantidad);
+        for (const asignacion of asignaciones) {
+          const subTotalAsignado = Math.round(item.precioUnitario * asignacion.cantidad * 100) / 100;
+          await client.query(
+            `INSERT INTO detalle_pedido (pedido_id, producto_id, lote_id, cantidad, precio, sub_total)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [pedidoId, item.producto_id, asignacion.lote_id, asignacion.cantidad, item.precioUnitario, subTotalAsignado]
+          );
+        }
+      }
+
+      const { rows: ventaRows } = await client.query(
+        `INSERT INTO venta (pedido_id, comprobante_id, total_pago)
+         VALUES ($1,$2,$3) RETURNING venta_id`,
+        [pedidoId, comprobanteId || 1, resumen.totalAPagar]
       );
-    }
+      const ventaId = ventaRows[0].venta_id;
 
-    const { rows: ventaRows } = await query(
-      `INSERT INTO venta (pedido_id, comprobante_id, total_pago)
-       VALUES ($1,$2,$3) RETURNING venta_id`,
-      [pedidoId, comprobanteId || 1, resumen.totalAPagar]
-    );
-    const ventaId = ventaRows[0].venta_id;
-
-    await query(
-      `INSERT INTO detalle_pago (venta_id, metodo_pago_id, monto_pagado)
-       VALUES ($1,$2,$3)`,
-      [ventaId, metodoPagoId, resumen.totalAPagar]
-    );
+      await client.query(
+        `INSERT INTO detalle_pago (venta_id, metodo_pago_id, monto_pagado)
+         VALUES ($1,$2,$3)`,
+        [ventaId, metodoPagoId, resumen.totalAPagar]
+      );
+    });
 
     const { rows: userRows } = await query(
       `SELECT email FROM usuarios WHERE id = $1`,
@@ -636,63 +632,60 @@ app.post("/api/ventas-presenciales", requiereRol("empleado"), async (req, res) =
     const tipoCliente = cliRows[0].tipo_cliente;
 
     const { rows: productosDB } = await query(
-      `SELECT p.*, pl.lote_id, pl.unidades_disponibles
-       FROM producto p
-       LEFT JOIN produccion_lotes pl ON pl.producto_id = p.producto_id
-         AND pl.estado = 'Disponible' AND pl.fecha_vencimiento >= CURRENT_DATE
-       WHERE p.producto_id = ANY($1)`,
+      `SELECT * FROM producto WHERE producto_id = ANY($1)`,
       [items.map((i) => i.producto_id)]
     );
 
     const itemsConPrecio = items.map((item) => {
       const prod = productosDB.find((p) => p.producto_id === item.producto_id);
       if (!prod) throw new Error(`Producto ${item.producto_id} no encontrado.`);
-      if (!prod.lote_id) throw new Error(`Sin stock para ${prod.nombre_producto}.`);
       return { ...prod, cantidad: item.cantidad };
     });
 
     const resumen = calcularResumenVenta(itemsConPrecio, tipoCliente);
     const codigoOrden = generarCodigoOrden();
 
-    const { rows: estadoRows } = await query(
-      `SELECT estado_id FROM estado_pedido WHERE descripcion = 'Facturado'`
-    );
-    const estadoId = estadoRows[0]?.estado_id;
-
-    const { rows: pedidoRows } = await query(
-      `INSERT INTO pedido (codigo_orden, cliente_id, estado_id, e_venta_id)
-       VALUES ($1,$2,$3,$4) RETURNING pedido_id, codigo_orden`,
-      [codigoOrden, clienteId, estadoId, eVentaId || null]
-    );
-    const pedidoId = pedidoRows[0].pedido_id;
-
-    for (const item of resumen.detalle) {
-      await query(
-        `INSERT INTO detalle_pedido (pedido_id, producto_id, lote_id, cantidad, precio, sub_total)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
-        [pedidoId, item.producto_id, item.lote_id, item.cantidad, item.precioUnitario, item.subTotal]
-      );
-      await query(
-        `UPDATE produccion_lotes SET unidades_disponibles = unidades_disponibles - $1 WHERE lote_id = $2`,
-        [item.cantidad, item.lote_id]
-      );
-    }
-
     const totalConDescuento = Math.max(0, resumen.totalAPagar - Number(descuento));
     const saldoPendiente = Math.max(0, totalConDescuento - Number(montoPagado || totalConDescuento));
 
-    const { rows: ventaRows } = await query(
-      `INSERT INTO venta (pedido_id, comprobante_id, descuento_aplicado, saldo_pendiente, total_pago)
-       VALUES ($1,$2,$3,$4,$5) RETURNING venta_id`,
-      [pedidoId, comprobanteId || 1, descuento, saldoPendiente, totalConDescuento]
-    );
-    const ventaId = ventaRows[0].venta_id;
+    await conTransaccion(async (client) => {
+      const { rows: estadoRows } = await client.query(
+        `SELECT estado_id FROM estado_pedido WHERE descripcion = 'Facturado'`
+      );
+      const estadoId = estadoRows[0]?.estado_id;
 
-    await query(
-      `INSERT INTO detalle_pago (venta_id, metodo_pago_id, monto_pagado)
-       VALUES ($1,$2,$3)`,
-      [ventaId, metodoPagoId, montoPagado || totalConDescuento]
-    );
+      const { rows: pedidoRows } = await client.query(
+        `INSERT INTO pedido (codigo_orden, cliente_id, estado_id, e_venta_id)
+         VALUES ($1,$2,$3,$4) RETURNING pedido_id`,
+        [codigoOrden, clienteId, estadoId, eVentaId || null]
+      );
+      const pedidoId = pedidoRows[0].pedido_id;
+
+      for (const item of resumen.detalle) {
+        const asignaciones = await asignarLotesFEFO(client, item.producto_id, item.nombre, item.cantidad);
+        for (const asignacion of asignaciones) {
+          const subTotalAsignado = Math.round(item.precioUnitario * asignacion.cantidad * 100) / 100;
+          await client.query(
+            `INSERT INTO detalle_pedido (pedido_id, producto_id, lote_id, cantidad, precio, sub_total)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [pedidoId, item.producto_id, asignacion.lote_id, asignacion.cantidad, item.precioUnitario, subTotalAsignado]
+          );
+        }
+      }
+
+      const { rows: ventaRows } = await client.query(
+        `INSERT INTO venta (pedido_id, comprobante_id, descuento_aplicado, saldo_pendiente, total_pago)
+         VALUES ($1,$2,$3,$4,$5) RETURNING venta_id`,
+        [pedidoId, comprobanteId || 1, descuento, saldoPendiente, totalConDescuento]
+      );
+      const ventaId = ventaRows[0].venta_id;
+
+      await client.query(
+        `INSERT INTO detalle_pago (venta_id, metodo_pago_id, monto_pagado)
+         VALUES ($1,$2,$3)`,
+        [ventaId, metodoPagoId, montoPagado || totalConDescuento]
+      );
+    });
 
     res.status(201).json({
       mensaje: "Venta registrada",
