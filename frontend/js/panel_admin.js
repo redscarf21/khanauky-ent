@@ -68,7 +68,7 @@ overlaySidebar.addEventListener("click", () => {
 async function cargarEstadosPedido() {
   try {
     estadosPedido = await Api.get("/api/estados-pedido");
-  } catch {}
+  } catch { }
 }
 
 async function cargarMetodosPago() {
@@ -78,14 +78,18 @@ async function cargarMetodosPago() {
       sel.innerHTML = metodosPago.map((m) =>
         `<option value="${m.metodo_pago_id}">${m.descripcion}</option>`).join("");
     });
-  } catch {}
+  } catch { }
 }
+
+const UMBRAL_STOCK_BAJO = 10;
+const DIAS_ALERTA_VENCIMIENTO = 7;
 
 async function cargarDashboard() {
   try {
-    const [pedidos, stock] = await Promise.all([
+    const [pedidos, stock, lotes] = await Promise.all([
       Api.get("/api/pedidos"),
-      Api.get("/api/stock")
+      Api.get("/api/stock"),
+      Api.get("/api/lotes")
     ]);
 
     document.getElementById("kpiPedidos").textContent = pedidos.length;
@@ -99,6 +103,39 @@ async function cargarDashboard() {
     if (sinStock > 0) {
       document.getElementById("kpiSinStock").closest(".kpi-card").classList.add("border-danger");
     }
+
+    const stockBajo = stock.filter((s) =>
+      Number(s.stock_disponible) > 0 && Number(s.stock_disponible) < UMBRAL_STOCK_BAJO
+    );
+    const contStockBajo = document.getElementById("alertaStockBajo");
+    contStockBajo.innerHTML = stockBajo.length === 0
+      ? `<p class="text-success small mb-0"><i class="bi bi-check-circle me-1"></i>Todo el stock está en niveles saludables.</p>`
+      : stockBajo.map((s) => `
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+          <span class="small">${s.nombre_producto}</span>
+          <span class="badge bg-warning text-dark">${s.stock_disponible} unid.</span>
+        </div>`).join("");
+
+    const hoy = new Date();
+    const lotesPorVencer = lotes.filter((l) => {
+      if (l.estado !== "Disponible") return false;
+      const dias = Math.ceil((new Date(l.fecha_vencimiento) - hoy) / (1000 * 60 * 60 * 24));
+      return dias <= DIAS_ALERTA_VENCIMIENTO;
+    });
+    const contVencer = document.getElementById("alertaLotesVencer");
+    contVencer.innerHTML = lotesPorVencer.length === 0
+      ? `<p class="text-success small mb-0"><i class="bi bi-check-circle me-1"></i>Ningún lote vence pronto.</p>`
+      : lotesPorVencer.map((l) => {
+        const dias = Math.ceil((new Date(l.fecha_vencimiento) - hoy) / (1000 * 60 * 60 * 24));
+        const vencido = dias < 0;
+        return `
+          <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+            <span class="small">${l.nombre_producto} <span class="text-mid">(${l.unidades_disponibles} unid.)</span></span>
+            <span class="badge ${vencido ? "bg-danger" : "bg-warning text-dark"}">
+              ${vencido ? "Vencido" : `Vence en ${dias} día(s)`}
+            </span>
+          </div>`;
+      }).join("");
   } catch (err) {
     console.error("Error dashboard:", err.message);
   }
@@ -153,8 +190,8 @@ async function cargarPedidos() {
         <td>
           <select class="form-select form-select-sm" style="width:auto;" data-orden="${p.codigo_orden}">
             ${estadosPedido.map((e) =>
-              `<option value="${e.estado_id}" ${e.descripcion === p.estado ? "selected" : ""}>${e.descripcion}</option>`
-            ).join("")}
+            `<option value="${e.estado_id}" ${e.descripcion === p.estado ? "selected" : ""}>${e.descripcion}</option>`
+          ).join("")}
           </select>
         </td>
       </tr>`;
@@ -242,14 +279,14 @@ async function buscarYRenderizarPedidos(dato) {
             <strong>${p.codigo_orden}</strong> — ${p.cliente_nombre}
             <div class="small text-mid">${fecha} · Total: S/ ${Number(p.total_pago || 0).toFixed(2)}
               ${saldo > 0
-                ? `· <span class="text-danger fw-semibold">Saldo pendiente: S/ ${saldo.toFixed(2)}</span>`
-                : `· <span class="text-success fw-semibold">Pagado completo</span>`}
+          ? `· <span class="text-danger fw-semibold">Saldo pendiente: S/ ${saldo.toFixed(2)}</span>`
+          : `· <span class="text-success fw-semibold">Pagado completo</span>`}
             </div>
           </div>
           <select class="form-select form-select-sm" style="width:auto;" data-cambiar-estado="${p.codigo_orden}">
             ${estadosPedido.map((e) =>
-              `<option value="${e.estado_id}" ${e.estado_id === p.estado_id ? "selected" : ""}>${e.descripcion}</option>`
-            ).join("")}
+            `<option value="${e.estado_id}" ${e.estado_id === p.estado_id ? "selected" : ""}>${e.descripcion}</option>`
+          ).join("")}
           </select>
         </div>
         ${p.venta_id && saldo > 0 ? `
@@ -332,7 +369,7 @@ async function cargarProductosCatalogo() {
       select.innerHTML = ubigeos.map((u) =>
         `<option value="${u.ubigeo_id}">${u.distrito} — ${u.provincia}</option>`).join("");
     }
-  } catch {}
+  } catch { }
 }
 
 async function cargarListaSucursales() {
@@ -555,8 +592,8 @@ async function cargarTransportes() {
         <td>
           <select class="form-select form-select-sm" style="width:auto;" data-id="${t.transporte_id}">
             ${estadosTransporte.map((e) =>
-              `<option value="${e.estado_transporte_id}" ${e.descripcion === t.estado ? "selected" : ""}>${e.descripcion}</option>`
-            ).join("")}
+        `<option value="${e.estado_transporte_id}" ${e.descripcion === t.estado ? "selected" : ""}>${e.descripcion}</option>`
+      ).join("")}
           </select>
         </td>
         <td><button class="btn btn-sm btn-outline-secondary" data-transporte-id="${t.transporte_id}">Guardar</button></td>
@@ -606,8 +643,9 @@ async function cargarClientes() {
   const cont = document.getElementById("tablaClientes");
   try {
     const clientes = await Api.get("/api/clientes");
+    window._clientesCache = clientes;
     cont.innerHTML = `<div class="table-responsive"><table class="tabla-khanauky"><thead><tr>
-      <th>Cliente</th><th>Tipo</th><th>DNI / RUC</th><th>Teléfono</th><th>Distrito</th><th>Bidones pendientes</th></tr></thead><tbody>` +
+      <th>Cliente</th><th>Tipo</th><th>DNI / RUC</th><th>Teléfono</th><th>Distrito</th><th>Bidones pendientes</th><th></th></tr></thead><tbody>` +
       clientes.map((c) => `<tr>
         <td>${c.nombres ? `${c.nombres} ${c.apellidos}` : c.razon_social}</td>
         <td>${c.tipo_cliente}</td>
@@ -617,10 +655,90 @@ async function cargarClientes() {
         <td>${Number(c.bidones_pendientes) > 0
           ? `<span class="text-danger fw-bold">${c.bidones_pendientes}</span>`
           : `<span class="text-success">0</span>`}</td>
+        <td><button class="btn btn-sm btn-outline-secondary" data-bidones-cliente="${c.cliente_id}">Bidones</button></td>
       </tr>`).join("") +
       `</tbody></table></div>`;
+
+    cont.querySelectorAll("button[data-bidones-cliente]").forEach((btn) => {
+      btn.addEventListener("click", () => mostrarPanelBidones(parseInt(btn.dataset.bidonesCliente)));
+    });
   } catch (err) {
     cont.innerHTML = `<p class="text-danger">${err.message}</p>`;
+  }
+}
+
+async function mostrarPanelBidones(clienteId) {
+  const panel = document.getElementById("panelBidonesCliente");
+  const cliente = (window._clientesCache || []).find((c) => c.cliente_id === clienteId);
+  const nombreCliente = cliente ? (cliente.nombres ? `${cliente.nombres} ${cliente.apellidos}` : cliente.razon_social) : "";
+
+  panel.classList.remove("d-none");
+  panel.innerHTML = `<p class="text-mid">Cargando historial de ${nombreCliente}...</p>`;
+
+  try {
+    const movimientos = await Api.get(`/api/bidones/${clienteId}`);
+
+    const filasHistorial = movimientos.length === 0
+      ? `<p class="text-mid small">Sin movimientos registrados todavía.</p>`
+      : `<div class="table-responsive"><table class="tabla-khanauky mb-0"><thead><tr>
+          <th>Fecha</th><th>Entregados</th><th>Recibidos</th><th>Prestados (neto)</th></tr></thead><tbody>` +
+      movimientos.map((m) => `<tr>
+          <td class="small">${new Date(m.fecha_movimiento).toLocaleDateString("es-PE")}</td>
+          <td>${m.cantidad_entregados}</td>
+          <td>${m.cantidad_recibidos}</td>
+          <td>${m.cantidad_prestados}</td>
+        </tr>`).join("") + `</tbody></table></div>`;
+
+    panel.innerHTML = `
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0">Bidones — ${nombreCliente}</h5>
+        <button class="btn-close" id="btnCerrarPanelBidones" aria-label="Cerrar"></button>
+      </div>
+
+      <form id="formNuevoBidon" class="row g-3 align-items-end mb-4">
+        <div class="col-md-3">
+          <label class="form-label small mb-1">Entregados hoy</label>
+          <input type="number" min="0" class="form-control form-control-sm" id="bidonEntregados" value="0">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small mb-1">Recibidos (vacíos)</label>
+          <input type="number" min="0" class="form-control form-control-sm" id="bidonRecibidos" value="0">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small mb-1">Prestados (neto)</label>
+          <input type="number" min="0" class="form-control form-control-sm" id="bidonPrestados" value="0">
+        </div>
+        <div class="col-md-3">
+          <button type="submit" class="btn-khanauky-primario btn-sm w-100">Registrar movimiento</button>
+        </div>
+      </form>
+
+      <h6 class="mb-2">Historial</h6>
+      ${filasHistorial}
+    `;
+
+    document.getElementById("btnCerrarPanelBidones").addEventListener("click", () => {
+      panel.classList.add("d-none");
+      panel.innerHTML = "";
+    });
+
+    document.getElementById("formNuevoBidon").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        await Api.post("/api/bidones", {
+          clienteId,
+          cantidadEntregados: parseInt(document.getElementById("bidonEntregados").value) || 0,
+          cantidadRecibidos: parseInt(document.getElementById("bidonRecibidos").value) || 0,
+          cantidadPrestados: parseInt(document.getElementById("bidonPrestados").value) || 0
+        });
+        await mostrarPanelBidones(clienteId);
+        cargarClientes();
+      } catch (err) {
+        alert("Error al registrar el movimiento: " + err.message);
+      }
+    });
+  } catch (err) {
+    panel.innerHTML = `<p class="text-danger">${err.message}</p>`;
   }
 }
 
@@ -668,8 +786,8 @@ function renderizarItemsVenta() {
       <div class="col-6">
         <select class="form-select" data-idx="${idx}" data-campo="producto_id">
           ${productosCatalogo.map((p) =>
-            `<option value="${p.producto_id}" ${p.producto_id === item.producto_id ? "selected" : ""}>${p.nombre_producto}</option>`
-          ).join("")}
+    `<option value="${p.producto_id}" ${p.producto_id === item.producto_id ? "selected" : ""}>${p.nombre_producto}</option>`
+  ).join("")}
         </select>
       </div>
       <div class="col-4">
