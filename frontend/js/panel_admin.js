@@ -482,6 +482,28 @@ async function cargarTransportes() {
   }
 }
 
+document.getElementById("formTransporte").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const mensaje = document.getElementById("transMensaje");
+  mensaje.className = "small mt-2 mb-0 text-mid";
+  mensaje.textContent = "Guardando...";
+
+  try {
+    await Api.post("/api/transportes", {
+      modeloTransporte: document.getElementById("transModelo").value,
+      tipoId: parseInt(document.getElementById("transTipo").value),
+      estadoTransporteId: parseInt(document.getElementById("transEstado").value)
+    });
+    mensaje.className = "small mt-2 mb-0 text-success fw-semibold";
+    mensaje.textContent = "Transporte registrado correctamente.";
+    document.getElementById("formTransporte").reset();
+    cargarTransportes();
+  } catch (err) {
+    mensaje.className = "small mt-2 mb-0 text-danger fw-semibold";
+    mensaje.textContent = err.message;
+  }
+});
+
 async function cargarClientes() {
   const cont = document.getElementById("tablaClientes");
   try {

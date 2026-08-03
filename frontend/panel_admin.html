@@ -210,6 +210,28 @@
         <!-- TRANSPORTES -->
         <section id="sec-transportes" class="seccion-admin">
           <h4 class="mb-4">Gestión de transportes</h4>
+
+          <form id="formTransporte" class="card-khanauky p-4 mb-4">
+            <h5 class="mb-3">Registrar nuevo transporte</h5>
+            <div class="row g-3">
+              <div class="col-md-5">
+                <label class="form-label">Modelo</label>
+                <input type="text" class="form-control" id="transModelo" placeholder="Ej. Kia K2700" required>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Tipo</label>
+                <select class="form-select" id="transTipo" required></select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Estado</label>
+                <select class="form-select" id="transEstado" required></select>
+              </div>
+            </div>
+            <button type="submit" class="btn-khanauky-primario mt-3">Registrar transporte</button>
+            <p id="transMensaje" class="small mt-2 mb-0"></p>
+          </form>
+
+          <h5 class="mb-3">Transportes registrados</h5>
           <div id="tablaTransportes">Cargando...</div>
         </section>
 
@@ -310,10 +332,12 @@
     // Cargar selects de tipo contrato y ubigeo para el formulario de empleados
     (async () => {
       try {
-        const [contratos, ubigeos, productos] = await Promise.all([
+        const [contratos, ubigeos, productos, tiposTransporte, estadosTransporte] = await Promise.all([
           Api.get("/api/tipos-contrato"),
           Api.get("/api/ubigeo"),
-          Api.get("/api/productos")
+          Api.get("/api/productos"),
+          Api.get("/api/tipos-transporte"),
+          Api.get("/api/estados-transporte")
         ]);
 
         document.getElementById("empTipoContrato").innerHTML =
@@ -324,6 +348,12 @@
 
         document.getElementById("loteProducto").innerHTML =
           productos.map((p) => `<option value="${p.producto_id}">${p.nombre_producto}</option>`).join("");
+
+        document.getElementById("transTipo").innerHTML =
+          tiposTransporte.map((t) => `<option value="${t.tipo_id}">${t.descripcion}</option>`).join("");
+
+        document.getElementById("transEstado").innerHTML =
+          estadosTransporte.map((e) => `<option value="${e.estado_transporte_id}">${e.descripcion}</option>`).join("");
       } catch (err) {
         console.error("Error cargando selects:", err.message);
       }
