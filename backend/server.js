@@ -436,7 +436,7 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
 
     await conTransaccion(async (client) => {
       const { rows: estadoRows } = await client.query(
-        `SELECT estado_id FROM estado_pedido WHERE descripcion = 'Pendiente'`
+        `SELECT estado_id FROM estado_pedido WHERE descripcion = 'Venta Registrada'`
       );
       const estadoId = estadoRows[0]?.estado_id;
 
@@ -566,6 +566,12 @@ app.get("/api/pedidos/:codigo/comprobante", requiereSesion, async (req, res) => 
       return res.status(403).json({ error: "No tienes permiso para ver este comprobante." });
     }
 
+    if (req.usuario.rol === "cliente" && pedido.estado === "Venta Registrada") {
+      return res.status(403).json({
+        error: "Tu comprobante estará disponible apenas confirmemos tu pago."
+      });
+    }
+
     const { rows: items } = await query(`
       SELECT dp.cantidad, dp.precio, dp.sub_total,
              pr.nombre_producto AS nombre
@@ -586,7 +592,9 @@ app.get("/api/pedidos/:codigo/comprobante", requiereSesion, async (req, res) => 
       telefono: pedido.telefono,
       tipoComprobante: pedido.tipo_comprobante,
       metodopago: "Varios",
-      creadoEn: new Date(pedido.fecha_pedido).toLocaleDateString("es-PE"),
+      creadoEn: `${new Date(pedido.fecha_pedido).toLocaleDateString("es-PE")} ${
+        pedido.hora_pedido ? pedido.hora_pedido.slice(0, 5) : ""
+      }`.trim(),
       productos: items.map((i) => ({
         nombre: i.nombre,
         cantidad: i.cantidad,
@@ -651,7 +659,7 @@ app.post("/api/ventas-presenciales", requiereRol("empleado"), async (req, res) =
 
     await conTransaccion(async (client) => {
       const { rows: estadoRows } = await client.query(
-        `SELECT estado_id FROM estado_pedido WHERE descripcion = 'Facturado'`
+        `SELECT estado_id FROM estado_pedido WHERE descripcion = 'Entregado'`
       );
       const estadoId = estadoRows[0]?.estado_id;
 

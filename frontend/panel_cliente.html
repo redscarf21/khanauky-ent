@@ -15,14 +15,10 @@
     .hero-perfil { background: linear-gradient(160deg, var(--azul-profundo), var(--azul-marca)); color: white; padding: 50px 0; }
     .hero-perfil h2 { color: white; margin-bottom: 4px; }
     .badge-estado { padding: 6px 14px; border-radius: var(--r-pill); font-size: 0.78rem; font-weight: 700; }
-    .estado-Pendiente { background: #E3F2FD; color: #1565C0; }
-    .estado-En-Proceso-de-Llenado { background: #FFF4E5; color: #8A5A12; }
-    .estado-Listo-para-Despacho { background: #E0F7FA; color: #00838F; }
-    .estado-En-Ruta-de-Entrega { background: #E3F2FD; color: #1565C0; }
+    .estado-Venta-Registrada { background: #FDECEC; color: #C53030; }
+    .estado-Pago-Confirmado { background: #E3F2FD; color: #1565C0; }
     .estado-Entregado { background: #E6F4EA; color: #2E7D32; }
-    .estado-Facturado { background: #E6F4EA; color: #2E7D32; }
-    .estado-Cancelado { background: #FDECEC; color: #C53030; }
-    .estado-Devuelto-por-Defecto { background: #FDECEC; color: #C53030; }
+    .estado-Cancelado { background: #EEEEEE; color: #616161; }
 
     .stepper-pedido { display: flex; align-items: center; margin: 14px 0 4px; }
     .stepper-paso { flex: 1; text-align: center; position: relative; }
@@ -44,6 +40,7 @@
   <section class="hero-perfil">
     <div class="container">
       <h2 id="nombreCliente">Cargando...</h2>
+      <span id="tipoCliente" class="badge bg-light text-azul-profundo mb-2"></span>
       <p class="mb-0" style="color:rgba(255,255,255,0.85)">Bienvenido a tu panel. Aquí puedes pedir agua, hielo y revisar tu historial.</p>
     </div>
   </section>
@@ -53,6 +50,9 @@
       <a href="menu.html" class="btn-khanauky-acento"><i class="bi bi-box-seam me-1"></i> Ir al catálogo y hacer pedido</a>
       <button id="btnCerrarSesion" class="btn btn-outline-danger rounded-pill px-4">Cerrar sesión</button>
     </div>
+
+    <h4 class="mb-3">Mi información</h4>
+    <div id="infoPerfil" class="card-khanauky p-3 mb-4">Cargando...</div>
 
     <h4 class="mb-3">Mis pedidos recientes</h4>
     <div id="listaPedidos">

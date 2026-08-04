@@ -5,7 +5,7 @@ const JWT_EXPIRA = "8h";
 
 export function firmarToken(usuario) {
   return jwt.sign(
-    { id: usuario.id, usuario: usuario.usuario, rol: usuario.rol, nombre: usuario.nombre, esAdminPrincipal: !!usuario.es_admin_principal },
+    { id: usuario.id, usuario: usuario.usuario, rol: usuario.rol, nombre: usuario.nombre, esAdminPrincipal: !!usuario.es_admin_principal, tipoCliente: usuario.tipoCliente || null },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRA }
   );

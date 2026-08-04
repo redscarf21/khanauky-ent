@@ -9,9 +9,13 @@ async function iniciar() {
     return;
   }
 
-  document.getElementById("nombreCliente").textContent = `Hola, ${usuario.nombre}`;
-  document.getElementById("tipoCliente").textContent =
-    usuario.tipoCliente === "EMPRESA" ? "Cuenta Empresa" : "Cuenta Personal";
+  try {
+    document.getElementById("nombreCliente").textContent = `Hola, ${usuario.nombre}`;
+    document.getElementById("tipoCliente").textContent =
+      usuario.tipoCliente === "EMPRESA" ? "Cuenta Empresa" : "Cuenta Personal";
+  } catch (err) {
+    console.error("Error mostrando datos de sesión:", err.message);
+  }
 
   cargarPedidos();
   cargarPerfil();
@@ -37,8 +41,8 @@ async function cargarPerfil() {
   }
 }
 
-const PASOS_SEGUIMIENTO = ["Pendiente", "En Proceso de Llenado", "Listo para Despacho", "En Ruta de Entrega", "Entregado"];
-const ESTADOS_FINALIZADOS_SIN_STEPPER = ["Cancelado", "Devuelto por Defecto", "Facturado"];
+const PASOS_SEGUIMIENTO = ["Venta Registrada", "Pago Confirmado", "Entregado"];
+const ESTADOS_FINALIZADOS_SIN_STEPPER = ["Cancelado"];
 
 function construirStepper(estadoActual) {
   if (ESTADOS_FINALIZADOS_SIN_STEPPER.includes(estadoActual)) return "";
@@ -95,11 +99,14 @@ async function cargarPedidos() {
               </div>
               ${p.tipo_comprobante ? `<span class="small text-mid">${p.tipo_comprobante}</span>` : ""}
             </div>
-            <a class="btn-khanauky-outline btn-sm"
-               href="/api/pedidos/${p.codigo_orden}/comprobante"
-               target="_blank">
-              <i class="bi bi-receipt"></i> Ver ${p.tipo_comprobante === "Factura" ? "factura" : "boleta"}
-            </a>
+            ${p.estado !== "Venta Registrada" ? `
+              <a class="btn-khanauky-outline btn-sm"
+                 href="/api/pedidos/${p.codigo_orden}/comprobante"
+                 target="_blank">
+                <i class="bi bi-receipt"></i> Ver ${p.tipo_comprobante === "Factura" ? "factura" : "boleta"}
+              </a>` : `
+              <span class="small text-mid fst-italic"><i class="bi bi-hourglass-split me-1"></i>Comprobante disponible al confirmar el pago</span>`
+            }
           </div>
           ${construirStepper(p.estado)}
           ${infoEntrega}

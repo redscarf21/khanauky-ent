@@ -363,14 +363,10 @@ INSERT INTO metodo_pago (descripcion) VALUES
 ON CONFLICT (descripcion) DO NOTHING;
 
 INSERT INTO estado_pedido (descripcion) VALUES
-('Pendiente'),
-('En Proceso de Llenado'),
-('Listo para Despacho'),
-('En Ruta de Entrega'),
+('Venta Registrada'),
+('Pago Confirmado'),
 ('Entregado'),
-('Cancelado'),
-('Devuelto por Defecto'),
-('Facturado')
+('Cancelado')
 ON CONFLICT (descripcion) DO NOTHING;
 
 INSERT INTO estado_empleado (descripcion) VALUES
