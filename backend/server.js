@@ -566,6 +566,10 @@ app.get("/api/pedidos/:codigo/comprobante", requiereSesion, async (req, res) => 
       return res.status(403).json({ error: "No tienes permiso para ver este comprobante." });
     }
 
+    if (pedido.estado === "Cancelado") {
+      return res.status(403).json({ error: "Este pedido fue cancelado, no cuenta con comprobante." });
+    }
+
     if (req.usuario.rol === "cliente" && pedido.estado === "Venta Registrada") {
       return res.status(403).json({
         error: "Tu comprobante estará disponible apenas confirmemos tu pago."
@@ -625,7 +629,7 @@ app.post("/api/ventas-presenciales", requiereRol("empleado"), async (req, res) =
   try {
     const {
       clienteId, items, metodoPagoId, comprobanteId,
-      descuento = 0, montoPagado, eVentaId
+      descuento = 0, montoPagado, eVentaId, ruc, razonSocial
     } = req.body;
 
     if (!clienteId || !Array.isArray(items) || items.length === 0 || !metodoPagoId) {
@@ -658,6 +662,15 @@ app.post("/api/ventas-presenciales", requiereRol("empleado"), async (req, res) =
     const saldoPendiente = Math.max(0, totalConDescuento - Number(montoPagado || totalConDescuento));
 
     await conTransaccion(async (client) => {
+      if (ruc && razonSocial) {
+        await client.query(
+          `INSERT INTO empresa (cliente_id, razon_social, ruc)
+           VALUES ($1,$2,$3)
+           ON CONFLICT (cliente_id) DO UPDATE SET razon_social = EXCLUDED.razon_social, ruc = EXCLUDED.ruc`,
+          [clienteId, razonSocial, ruc]
+        );
+      }
+
       const { rows: estadoRows } = await client.query(
         `SELECT estado_id FROM estado_pedido WHERE descripcion = 'Entregado'`
       );

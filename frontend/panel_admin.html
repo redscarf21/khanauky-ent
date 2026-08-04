@@ -221,6 +221,21 @@
                 <label class="form-label">Total estimado</label>
                 <p class="fw-bold fs-5 pt-1" id="totalVentaPresencial">S/ 0.00</p>
               </div>
+            </div>
+
+            <div class="row g-3 mb-3 d-none" id="bloqueFacturaVenta">
+              <div class="col-md-6">
+                <label class="form-label">RUC</label>
+                <input type="text" class="form-control" id="ventaRuc" maxlength="11" placeholder="20123456789">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Razón social</label>
+                <input type="text" class="form-control" id="ventaRazonSocial"
+                  placeholder="Ej. Distribuidora ABC S.A.C.">
+              </div>
+            </div>
+
+            <div class="row g-3 mb-3">
               <div class="col-md-6">
                 <label class="form-label">Descuento (S/)</label>
                 <input type="number" min="0" step="0.01" class="form-control" id="ventaDescuento" value="0">

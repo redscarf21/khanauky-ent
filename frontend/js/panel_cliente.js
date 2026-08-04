@@ -99,12 +99,13 @@ async function cargarPedidos() {
               </div>
               ${p.tipo_comprobante ? `<span class="small text-mid">${p.tipo_comprobante}</span>` : ""}
             </div>
-            ${p.estado !== "Venta Registrada" ? `
+            ${p.estado !== "Venta Registrada" && p.estado !== "Cancelado" ? `
               <a class="btn-khanauky-outline btn-sm"
                  href="/api/pedidos/${p.codigo_orden}/comprobante"
                  target="_blank">
                 <i class="bi bi-receipt"></i> Ver ${p.tipo_comprobante === "Factura" ? "factura" : "boleta"}
-              </a>` : `
+              </a>` : p.estado === "Cancelado" ? `
+              <span class="small text-mid fst-italic"><i class="bi bi-x-circle me-1"></i>Sin comprobante (cancelado)</span>` : `
               <span class="small text-mid fst-italic"><i class="bi bi-hourglass-split me-1"></i>Comprobante disponible al confirmar el pago</span>`
             }
           </div>

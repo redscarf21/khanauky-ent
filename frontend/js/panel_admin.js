@@ -69,7 +69,7 @@ overlaySidebar.addEventListener("click", () => {
 async function cargarEstadosPedido() {
   try {
     estadosPedido = await Api.get("/api/estados-pedido");
-  } catch { }
+  } catch {}
 }
 
 async function cargarMetodosPago() {
@@ -79,7 +79,7 @@ async function cargarMetodosPago() {
       sel.innerHTML = metodosPago.map((m) =>
         `<option value="${m.metodo_pago_id}">${m.descripcion}</option>`).join("");
     });
-  } catch { }
+  } catch {}
 }
 
 const UMBRAL_STOCK_BAJO = 10;
@@ -127,16 +127,16 @@ async function cargarDashboard() {
     contVencer.innerHTML = lotesPorVencer.length === 0
       ? `<p class="text-success small mb-0"><i class="bi bi-check-circle me-1"></i>Ningún lote vence pronto.</p>`
       : lotesPorVencer.map((l) => {
-        const dias = Math.ceil((new Date(l.fecha_vencimiento) - hoy) / (1000 * 60 * 60 * 24));
-        const vencido = dias < 0;
-        return `
+          const dias = Math.ceil((new Date(l.fecha_vencimiento) - hoy) / (1000 * 60 * 60 * 24));
+          const vencido = dias < 0;
+          return `
           <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
             <span class="small">${l.nombre_producto} <span class="text-mid">(${l.unidades_disponibles} unid.)</span></span>
             <span class="badge ${vencido ? "bg-danger" : "bg-warning text-dark"}">
               ${vencido ? "Vencido" : `Vence en ${dias} día(s)`}
             </span>
           </div>`;
-      }).join("");
+        }).join("");
   } catch (err) {
     console.error("Error dashboard:", err.message);
   }
@@ -187,8 +187,8 @@ async function cargarPedidos() {
         <td>
           <select class="form-select form-select-sm" style="width:auto;" data-orden="${p.codigo_orden}">
             ${estadosPedido.map((e) =>
-            `<option value="${e.estado_id}" ${e.descripcion === p.estado ? "selected" : ""}>${e.descripcion}</option>`
-          ).join("")}
+              `<option value="${e.estado_id}" ${e.descripcion === p.estado ? "selected" : ""}>${e.descripcion}</option>`
+            ).join("")}
           </select>
         </td>
       </tr>`;
@@ -276,14 +276,14 @@ async function buscarYRenderizarPedidos(dato) {
             <strong>${p.codigo_orden}</strong> — ${p.cliente_nombre}
             <div class="small text-mid">${fecha} · Total: S/ ${Number(p.total_pago || 0).toFixed(2)}
               ${saldo > 0
-          ? `· <span class="text-danger fw-semibold">Saldo pendiente: S/ ${saldo.toFixed(2)}</span>`
-          : `· <span class="text-success fw-semibold">Pagado completo</span>`}
+                ? `· <span class="text-danger fw-semibold">Saldo pendiente: S/ ${saldo.toFixed(2)}</span>`
+                : `· <span class="text-success fw-semibold">Pagado completo</span>`}
             </div>
           </div>
           <select class="form-select form-select-sm" style="width:auto;" data-cambiar-estado="${p.codigo_orden}">
             ${estadosPedido.map((e) =>
-            `<option value="${e.estado_id}" ${e.estado_id === p.estado_id ? "selected" : ""}>${e.descripcion}</option>`
-          ).join("")}
+              `<option value="${e.estado_id}" ${e.estado_id === p.estado_id ? "selected" : ""}>${e.descripcion}</option>`
+            ).join("")}
           </select>
         </div>
         ${p.venta_id && saldo > 0 ? `
@@ -347,10 +347,12 @@ document.getElementById("btnListarFacturas").addEventListener("click", async () 
     cont.innerHTML = pedidos.map((p) => `
       <div class="d-flex justify-content-between align-items-center border-bottom py-2">
         <span>${p.codigo_orden} — ${p.cliente_nombre} — S/ ${Number(p.total_pago || 0).toFixed(2)}</span>
-        <a class="btn-khanauky-outline btn-sm" target="_blank"
-           href="/api/pedidos/${p.codigo_orden}/comprobante">
-          ${p.tipo_comprobante || "Boleta"}
-        </a>
+        ${p.estado === "Cancelado"
+          ? `<span class="small text-mid fst-italic">Sin comprobante (cancelado)</span>`
+          : `<a class="btn-khanauky-outline btn-sm" target="_blank"
+               href="/api/pedidos/${p.codigo_orden}/comprobante">
+              ${p.tipo_comprobante || "Boleta"}
+            </a>`}
       </div>`).join("");
   } catch (err) {
     cont.innerHTML = `<p class="text-danger">${err.message}</p>`;
@@ -366,7 +368,7 @@ async function cargarProductosCatalogo() {
       select.innerHTML = ubigeos.map((u) =>
         `<option value="${u.ubigeo_id}">${u.distrito} — ${u.provincia}</option>`).join("");
     }
-  } catch { }
+  } catch {}
 }
 
 async function cargarListaSucursales() {
@@ -589,8 +591,8 @@ async function cargarTransportes() {
         <td>
           <select class="form-select form-select-sm" style="width:auto;" data-id="${t.transporte_id}">
             ${estadosTransporte.map((e) =>
-        `<option value="${e.estado_transporte_id}" ${e.descripcion === t.estado ? "selected" : ""}>${e.descripcion}</option>`
-      ).join("")}
+              `<option value="${e.estado_transporte_id}" ${e.descripcion === t.estado ? "selected" : ""}>${e.descripcion}</option>`
+            ).join("")}
           </select>
         </td>
         <td><button class="btn btn-sm btn-outline-secondary" data-transporte-id="${t.transporte_id}">Guardar</button></td>
@@ -674,12 +676,12 @@ async function cargarEntregas() {
             <td>
               <select class="form-select form-select-sm" style="width:auto;" data-transporte="${d.delivery_id}">
                 ${transportes.map((t) =>
-      `<option value="${t.transporte_id}" ${t.transporte_id === d.transporte_id ? "selected" : ""}>${t.modelo_transporte}</option>`
-    ).join("")}
+                  `<option value="${t.transporte_id}" ${t.transporte_id === d.transporte_id ? "selected" : ""}>${t.modelo_transporte}</option>`
+                ).join("")}
               </select>
             </td>
-            <td><input type="time" class="form-control form-control-sm" style="width:110px;" data-salida="${d.delivery_id}" value="${d.hora_salida ? d.hora_salida.slice(0, 5) : ""}"></td>
-            <td><input type="time" class="form-control form-control-sm" style="width:110px;" data-entrega="${d.delivery_id}" value="${d.hora_entrega ? d.hora_entrega.slice(0, 5) : ""}"></td>
+            <td><input type="time" class="form-control form-control-sm" style="width:110px;" data-salida="${d.delivery_id}" value="${d.hora_salida ? d.hora_salida.slice(0,5) : ""}"></td>
+            <td><input type="time" class="form-control form-control-sm" style="width:110px;" data-entrega="${d.delivery_id}" value="${d.hora_entrega ? d.hora_entrega.slice(0,5) : ""}"></td>
             <td><button class="btn btn-sm btn-outline-secondary" data-guardar-entrega="${d.delivery_id}">Guardar</button></td>
           </tr>`).join("")}
         </tbody></table></div>
@@ -756,7 +758,7 @@ async function mostrarPanelBidones(clienteId) {
       ? `<p class="text-mid small">Sin movimientos registrados todavía.</p>`
       : `<div class="table-responsive"><table class="tabla-khanauky mb-0"><thead><tr>
           <th>Fecha</th><th>Entregados</th><th>Recibidos</th><th>Prestados (neto)</th></tr></thead><tbody>` +
-      movimientos.map((m) => `<tr>
+        movimientos.map((m) => `<tr>
           <td class="small">${new Date(m.fecha_movimiento).toLocaleDateString("es-PE")}</td>
           <td>${m.cantidad_entregados}</td>
           <td>${m.cantidad_recibidos}</td>
@@ -860,8 +862,8 @@ function renderizarItemsVenta() {
       <div class="col-6">
         <select class="form-select" data-idx="${idx}" data-campo="producto_id">
           ${productosCatalogo.map((p) =>
-    `<option value="${p.producto_id}" ${p.producto_id === item.producto_id ? "selected" : ""}>${p.nombre_producto}</option>`
-  ).join("")}
+            `<option value="${p.producto_id}" ${p.producto_id === item.producto_id ? "selected" : ""}>${p.nombre_producto}</option>`
+          ).join("")}
         </select>
       </div>
       <div class="col-4">
@@ -917,11 +919,26 @@ async function recalcularTotal() {
   }
 }
 
+document.getElementById("ventaComprobante").addEventListener("change", (e) => {
+  const esFactura = e.target.options[e.target.selectedIndex].text === "Factura";
+  document.getElementById("bloqueFacturaVenta").classList.toggle("d-none", !esFactura);
+});
+
 document.getElementById("formVentaPresencial")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const clienteId = document.getElementById("ventaClienteId").value;
   if (!clienteId) { alert("Busca y selecciona un cliente primero."); return; }
   if (!itemsVentaPresencial.length) { alert("Agrega al menos un producto."); return; }
+
+  const comprobanteSelect = document.getElementById("ventaComprobante");
+  const esFactura = comprobanteSelect.options[comprobanteSelect.selectedIndex].text === "Factura";
+  const ruc = document.getElementById("ventaRuc").value.trim();
+  const razonSocial = document.getElementById("ventaRazonSocial").value.trim();
+
+  if (esFactura && (!ruc || !razonSocial)) {
+    alert("Para emitir factura, ingresa el RUC y la razón social.");
+    return;
+  }
 
   const descuento = parseFloat(document.getElementById("ventaDescuento").value) || 0;
   const montoPagado = parseFloat(document.getElementById("ventaMontoPagado").value) || 0;
@@ -931,13 +948,15 @@ document.getElementById("formVentaPresencial")?.addEventListener("submit", async
       clienteId: parseInt(clienteId),
       items: itemsVentaPresencial,
       metodoPagoId: parseInt(document.getElementById("ventaMetodoPago").value),
-      comprobanteId: parseInt(document.getElementById("ventaComprobante").value),
+      comprobanteId: parseInt(comprobanteSelect.value),
       descuento,
-      montoPagado: montoPagado || undefined
+      montoPagado: montoPagado || undefined,
+      ...(esFactura && { ruc, razonSocial })
     });
 
     alert(`Venta registrada: ${data.orden}\nTotal: S/ ${data.totalAPagar.toFixed(2)}\nSaldo pendiente: S/ ${data.saldoPendiente.toFixed(2)}`);
     document.getElementById("formVentaPresencial").reset();
+    document.getElementById("bloqueFacturaVenta").classList.add("d-none");
     document.getElementById("ventaClienteId").value = "";
     document.getElementById("ventaClienteNombre").textContent = "";
     itemsVentaPresencial = [];
