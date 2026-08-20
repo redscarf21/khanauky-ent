@@ -120,6 +120,9 @@ app.post("/api/registro", limiteLogin, async (req, res) => {
     if (!tipoCliente || !nombre || !usuario || !pass || !email || !telefono || !direccion || !ubigeoId) {
       return res.status(400).json({ error: "Completa todos los campos obligatorios." });
     }
+    if (isNaN(parseInt(ubigeoId))) {
+      return res.status(400).json({ error: "Selecciona tu distrito de la lista." });
+    }
     if (tipoCliente === "PERSONA" && (!dni || !/^\d{8}$/.test(dni))) {
       return res.status(400).json({ error: "El DNI debe tener exactamente 8 dígitos." });
     }
@@ -139,40 +142,45 @@ app.post("/api/registro", limiteLogin, async (req, res) => {
     }
 
     const passHash = await bcrypt.hash(pass, 10);
-
-    const { rows: usuRows } = await query(
-      `INSERT INTO usuarios (nombre, usuario, pass_hash, rol, email, email_verificado)
-       VALUES ($1,$2,$3,'cliente',$4, FALSE) RETURNING id`,
-      [nombre, usuario, passHash, email]
-    );
-    const nuevoUsuarioId = usuRows[0].id;
-
-    const { rows: cliRows } = await query(
-      `INSERT INTO cliente (direccion, telefono, tipo_cliente, ubigeo_id, usuario_id)
-       VALUES ($1,$2,$3,$4,$5) RETURNING cliente_id`,
-      [direccion, telefono, tipoCliente, ubigeoId, nuevoUsuarioId]
-    );
-    const nuevoClienteId = cliRows[0].cliente_id;
-
-    if (tipoCliente === "PERSONA") {
-      await query(
-        `INSERT INTO persona (cliente_id, nombres, apellidos, sexo, dni) VALUES ($1,$2,$3,$4,$5)`,
-        [nuevoClienteId, nombre, "", sexo || "M", dni]
-      );
-    } else {
-      await query(
-        `INSERT INTO empresa (cliente_id, razon_social, ruc) VALUES ($1,$2,$3)`,
-        [nuevoClienteId, razonSocial, ruc]
-      );
-    }
-
     const token = crypto.randomBytes(32).toString("hex");
     const expira = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    await query(
-      `INSERT INTO tokens_verificacion (token, usuario_id, expira) VALUES ($1,$2,$3)`,
-      [token, nuevoUsuarioId, expira]
-    );
 
+    await conTransaccion(async (client) => {
+      const { rows: usuRows } = await client.query(
+        `INSERT INTO usuarios (nombre, usuario, pass_hash, rol, email, email_verificado)
+         VALUES ($1,$2,$3,'cliente',$4, FALSE) RETURNING id`,
+        [nombre, usuario, passHash, email]
+      );
+      const nuevoUsuarioId = usuRows[0].id;
+
+      const { rows: cliRows } = await client.query(
+        `INSERT INTO cliente (direccion, telefono, tipo_cliente, ubigeo_id, usuario_id)
+         VALUES ($1,$2,$3,$4,$5) RETURNING cliente_id`,
+        [direccion, telefono, tipoCliente, parseInt(ubigeoId), nuevoUsuarioId]
+      );
+      const nuevoClienteId = cliRows[0].cliente_id;
+
+      if (tipoCliente === "PERSONA") {
+        await client.query(
+          `INSERT INTO persona (cliente_id, nombres, apellidos, sexo, dni) VALUES ($1,$2,$3,$4,$5)`,
+          [nuevoClienteId, nombre, "", sexo || "M", dni]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO empresa (cliente_id, razon_social, ruc) VALUES ($1,$2,$3)`,
+          [nuevoClienteId, razonSocial, ruc]
+        );
+      }
+
+      await client.query(
+        `INSERT INTO tokens_verificacion (token, usuario_id, expira) VALUES ($1,$2,$3)`,
+        [token, nuevoUsuarioId, expira]
+      );
+    });
+
+    // A partir de aquí el registro ya quedó guardado de forma completa
+    // y consistente. Si el envío del correo falla, la cuenta sigue
+    // siendo válida (se puede reenviar la verificación más adelante).
     const correoEnviado = await enviarCorreoVerificacion(email, nombre, token);
 
     res.status(201).json({
@@ -182,7 +190,7 @@ app.post("/api/registro", limiteLogin, async (req, res) => {
     });
   } catch (error) {
     console.error("Error registro:", error);
-    res.status(500).json({ error: "Error al registrar el usuario." });
+    res.status(500).json({ error: "Error al registrar el usuario. Ningún dato quedó guardado, puedes intentar de nuevo." });
   }
 });
 
@@ -1119,45 +1127,48 @@ app.post("/api/empleados", requiereRol("empleado"), async (req, res) => {
     } = req.body;
 
     const passHash = await bcrypt.hash(pass, 10);
-    const { rows: usuRows } = await query(
-      `INSERT INTO usuarios (nombre, usuario, pass_hash, rol, email, email_verificado)
-       VALUES ($1,$2,$3,'empleado',$4, TRUE) RETURNING id`,
-      [`${nombres} ${apellidos}`, usuario, passHash, email]
-    );
-    const usuarioId = usuRows[0].id;
 
-    const { rows: empRows } = await query(
-      `INSERT INTO empleado (nombres, apellidos, telefono_empleado, sexo, dni, fecha_contratacion,
-         tipo_empleado, tipo_contrato_id, ubigeo_id, estado_empleado_id, usuario_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING empleado_id`,
-      [nombres, apellidos, telefono, sexo, dni, fechaContratacion,
-        tipoEmpleado, tipoContratoId, ubigeoId, estadoEmpleadoId || 1, usuarioId]
-    );
-    const empleadoId = empRows[0].empleado_id;
+    await conTransaccion(async (client) => {
+      const { rows: usuRows } = await client.query(
+        `INSERT INTO usuarios (nombre, usuario, pass_hash, rol, email, email_verificado)
+         VALUES ($1,$2,$3,'empleado',$4, TRUE) RETURNING id`,
+        [`${nombres} ${apellidos}`, usuario, passHash, email]
+      );
+      const usuarioId = usuRows[0].id;
 
-    if (tipoEmpleado === "VENTA") {
-      await query(
-        `INSERT INTO e_venta (empleado_id, telefono_corporativo) VALUES ($1,$2)`,
-        [empleadoId, telefonoCorporativo || null]
+      const { rows: empRows } = await client.query(
+        `INSERT INTO empleado (nombres, apellidos, telefono_empleado, sexo, dni, fecha_contratacion,
+           tipo_empleado, tipo_contrato_id, ubigeo_id, estado_empleado_id, usuario_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING empleado_id`,
+        [nombres, apellidos, telefono, sexo, dni, fechaContratacion,
+          tipoEmpleado, tipoContratoId, ubigeoId, estadoEmpleadoId || 1, usuarioId]
       );
-    } else if (tipoEmpleado === "PRODUCCION") {
-      await query(
-        `INSERT INTO e_produccion (empleado_id, carnet_sanidad, fecha_vencimiento_carnet, talla_vestimenta)
-         VALUES ($1,$2,$3,$4)`,
-        [empleadoId, carnetSanidad, fechaVencimientoCarnet, tallaVestimenta || null]
-      );
-    } else if (tipoEmpleado === "ENTREGA") {
-      await query(
-        `INSERT INTO e_entrega (empleado_id, numero_licencia_conducir, fecha_vencimiento_licencia)
-         VALUES ($1,$2,$3)`,
-        [empleadoId, numeroLicencia, fechaVencimientoLicencia]
-      );
-    }
+      const empleadoId = empRows[0].empleado_id;
+
+      if (tipoEmpleado === "VENTA") {
+        await client.query(
+          `INSERT INTO e_venta (empleado_id, telefono_corporativo) VALUES ($1,$2)`,
+          [empleadoId, telefonoCorporativo || null]
+        );
+      } else if (tipoEmpleado === "PRODUCCION") {
+        await client.query(
+          `INSERT INTO e_produccion (empleado_id, carnet_sanidad, fecha_vencimiento_carnet, talla_vestimenta)
+           VALUES ($1,$2,$3,$4)`,
+          [empleadoId, carnetSanidad, fechaVencimientoCarnet, tallaVestimenta || null]
+        );
+      } else if (tipoEmpleado === "ENTREGA") {
+        await client.query(
+          `INSERT INTO e_entrega (empleado_id, numero_licencia_conducir, fecha_vencimiento_licencia)
+           VALUES ($1,$2,$3)`,
+          [empleadoId, numeroLicencia, fechaVencimientoLicencia]
+        );
+      }
+    });
 
     res.status(201).json({ mensaje: "Empleado creado correctamente." });
   } catch (error) {
     console.error("Error crear empleado:", error);
-    res.status(500).json({ error: "Error al crear el empleado." });
+    res.status(500).json({ error: "Error al crear el empleado. Ningún dato quedó guardado, puedes intentar de nuevo." });
   }
 });
 
