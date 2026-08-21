@@ -141,6 +141,18 @@ app.post("/api/registro", limiteLogin, async (req, res) => {
       return res.status(409).json({ error: "Ese usuario o correo ya está registrado." });
     }
 
+    if (tipoCliente === "PERSONA") {
+      const { rows: dniExistente } = await query(`SELECT cliente_id FROM persona WHERE dni = $1`, [dni]);
+      if (dniExistente.length > 0) {
+        return res.status(409).json({ error: "Ese DNI ya está registrado con otra cuenta." });
+      }
+    } else {
+      const { rows: rucExistente } = await query(`SELECT cliente_id FROM empresa WHERE ruc = $1`, [ruc]);
+      if (rucExistente.length > 0) {
+        return res.status(409).json({ error: "Ese RUC ya está registrado con otra cuenta." });
+      }
+    }
+
     const passHash = await bcrypt.hash(pass, 10);
     const token = crypto.randomBytes(32).toString("hex");
     const expira = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -190,6 +202,9 @@ app.post("/api/registro", limiteLogin, async (req, res) => {
     });
   } catch (error) {
     console.error("Error registro:", error);
+    if (error.code === "23505") {
+      return res.status(409).json({ error: "Ya existe una cuenta con ese DNI, RUC, usuario o correo." });
+    }
     res.status(500).json({ error: "Error al registrar el usuario. Ningún dato quedó guardado, puedes intentar de nuevo." });
   }
 });
@@ -417,7 +432,7 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
       return res.status(403).json({ error: "Solo los clientes pueden registrar pedidos." });
     }
 
-    const { items, metodoPagoId, comprobanteId, direccionEntrega, ubigeoId } = req.body;
+    const { items, metodoPagoId, comprobanteId, direccionEntrega, ubigeoId, ruc, razonSocial, bidonesCompra, bidonesDevolucion } = req.body;
 
     if (!Array.isArray(items) || items.length === 0 || !metodoPagoId) {
       return res.status(400).json({ error: "Completa todos los datos del pedido." });
@@ -442,7 +457,28 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
     const resumen = calcularResumenVenta(itemsConPrecio, tipoCliente);
     const codigoOrden = generarCodigoOrden();
 
+    const PRECIO_COMPRA_BIDON = 5;
+    const cantidadBidones20L = resumen.detalle
+      .filter((i) => i.nombre === "Bidón de Agua 20L")
+      .reduce((t, i) => t + i.cantidad, 0);
+
+    if (cantidadBidones20L > 0 && bidonesCompra === false && !bidonesDevolucion) {
+      return res.status(400).json({ error: "Indica si la devolución del bidón será contra entrega o posterior." });
+    }
+
+    const cargoBidones = (cantidadBidones20L > 0 && bidonesCompra) ? cantidadBidones20L * PRECIO_COMPRA_BIDON : 0;
+    const totalFinal = Math.round((resumen.totalAPagar + cargoBidones) * 100) / 100;
+
     await conTransaccion(async (client) => {
+      if (ruc && razonSocial) {
+        await client.query(
+          `INSERT INTO empresa (cliente_id, razon_social, ruc)
+           VALUES ($1,$2,$3)
+           ON CONFLICT (cliente_id) DO UPDATE SET razon_social = EXCLUDED.razon_social, ruc = EXCLUDED.ruc`,
+          [clienteId, razonSocial, ruc]
+        );
+      }
+
       const { rows: estadoRows } = await client.query(
         `SELECT estado_id FROM estado_pedido WHERE descripcion = 'Venta Registrada'`
       );
@@ -480,17 +516,29 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
         }
       }
 
+      if (cantidadBidones20L > 0) {
+        const entregados = cantidadBidones20L;
+        const recibidos = bidonesCompra ? 0 : (bidonesDevolucion === "contra_entrega" ? cantidadBidones20L : 0);
+        const prestados = bidonesCompra ? 0 : (bidonesDevolucion === "posterior" ? cantidadBidones20L : 0);
+
+        await client.query(
+          `INSERT INTO control_bidones (cantidad_entregados, cantidad_recibidos, cantidad_prestados, delivery_id, cliente_id)
+           VALUES ($1,$2,$3,$4,$5)`,
+          [entregados, recibidos, prestados, deliveryId, clienteId]
+        );
+      }
+
       const { rows: ventaRows } = await client.query(
         `INSERT INTO venta (pedido_id, comprobante_id, total_pago)
          VALUES ($1,$2,$3) RETURNING venta_id`,
-        [pedidoId, comprobanteId || 1, resumen.totalAPagar]
+        [pedidoId, comprobanteId || 1, totalFinal]
       );
       const ventaId = ventaRows[0].venta_id;
 
       await client.query(
         `INSERT INTO detalle_pago (venta_id, metodo_pago_id, monto_pagado)
          VALUES ($1,$2,$3)`,
-        [ventaId, metodoPagoId, resumen.totalAPagar]
+        [ventaId, metodoPagoId, totalFinal]
       );
     });
 
@@ -500,7 +548,7 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
     );
     if (userRows[0]?.email) {
       enviarCorreoPedidoConfirmado(
-        userRows[0].email, req.usuario.nombre, codigoOrden, resumen.totalAPagar
+        userRows[0].email, req.usuario.nombre, codigoOrden, totalFinal
       ).catch(() => { });
     }
 
@@ -508,7 +556,8 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
       mensaje: "Pedido registrado",
       orden: codigoOrden,
       modalidadEntrega: resumen.modalidadSugerida,
-      totalAPagar: resumen.totalAPagar
+      cargoBidones,
+      totalAPagar: totalFinal
     });
   } catch (error) {
     console.error("Error pedido:", error);

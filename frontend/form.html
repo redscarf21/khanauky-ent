@@ -52,8 +52,16 @@
             <input type="text" class="form-control" id="direccion" required placeholder="Calle, número, referencia">
           </div>
           <div class="col-md-6">
+            <label class="form-label">Sucursal de despacho</label>
+            <select class="form-select" id="sucursal" required></select>
+          </div>
+          <div class="col-md-6">
             <label class="form-label">Método de pago</label>
-            <select class="form-select" id="metodoPagoId" required></select>
+            <select class="form-select" id="pago" required>
+              <option value="Efectivo al recibir">Efectivo (al recibir)</option>
+              <option value="Yape / Plin">Yape / Plin</option>
+              <option value="Transferencia">Transferencia bancaria</option>
+            </select>
           </div>
         </div>
 
@@ -69,6 +77,28 @@
           <div class="col-md-6">
             <label class="form-label">Razón social</label>
             <input type="text" class="form-control" id="razonSocial">
+          </div>
+        </div>
+
+        <div class="d-none mt-4 p-3" id="bloqueBidones" style="background:var(--fondo); border-radius:var(--r-md);">
+          <h6 class="mb-2"><i class="bi bi-droplet-half me-1"></i> Tu pedido incluye bidón(es) de 20L</h6>
+          <p class="small text-mid mb-2">Elige qué hacer con el/los bidón(es):</p>
+
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="opcionBidon" id="bidonPrestamo" value="prestamo" checked>
+            <label class="form-check-label small" for="bidonPrestamo">Es un préstamo — devolveré el bidón vacío</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="opcionBidon" id="bidonCompra" value="compra">
+            <label class="form-check-label small" for="bidonCompra">Quiero comprar el/los bidón(es) (+S/ 5.00 c/u)</label>
+          </div>
+
+          <div class="mt-2" id="bloqueDevolucionBidon">
+            <label class="form-label small mb-1">¿Cuándo devolverás el bidón vacío?</label>
+            <select class="form-select form-select-sm" id="devolucionBidon" style="max-width:260px;">
+              <option value="contra_entrega">Contra entrega (al recibir el nuevo)</option>
+              <option value="posterior">Más adelante</option>
+            </select>
           </div>
         </div>
 

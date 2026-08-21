@@ -4,16 +4,36 @@ const btnConfirmar = document.getElementById("btnConfirmar");
 const avisoEntrega = document.getElementById("avisoEntrega");
 const checkFactura = document.getElementById("quiereFactura");
 const bloqueFactura = document.getElementById("bloqueFactura");
+const bloqueBidones = document.getElementById("bloqueBidones");
+const bloqueDevolucionBidon = document.getElementById("bloqueDevolucionBidon");
+
+const PRECIO_COMPRA_BIDON = 5;
 
 let pedido = JSON.parse(localStorage.getItem("carritoAgua")) || [];
 let resumenActual = null;
 let metodosPago = [];
 let tiposComprobante = [];
 let ubigeoIdCliente = null;
+let cantidadBidones20L = 0;
 
 checkFactura.addEventListener("change", () => {
   bloqueFactura.classList.toggle("d-none", !checkFactura.checked);
 });
+
+document.querySelectorAll('input[name="opcionBidon"]').forEach((radio) => {
+  radio.addEventListener("change", () => {
+    const esCompra = document.getElementById("bidonCompra").checked;
+    bloqueDevolucionBidon.classList.toggle("d-none", esCompra);
+    actualizarTotalMostrado();
+  });
+});
+
+function actualizarTotalMostrado() {
+  if (!resumenActual) return;
+  const comprarBidon = document.getElementById("bidonCompra")?.checked;
+  const extra = (comprarBidon && cantidadBidones20L > 0) ? cantidadBidones20L * PRECIO_COMPRA_BIDON : 0;
+  spanTotal.textContent = `S/ ${(resumenActual.totalAPagar + extra).toFixed(2)}`;
+}
 
 async function cargarResumen() {
   if (pedido.length === 0) {
@@ -34,7 +54,12 @@ async function cargarResumen() {
         </div>`;
     });
 
-    spanTotal.textContent = `S/ ${resumenActual.totalAPagar.toFixed(2)}`;
+    cantidadBidones20L = resumenActual.detalle
+      .filter((i) => i.nombre === "Bidón de Agua 20L")
+      .reduce((t, i) => t + i.cantidad, 0);
+    bloqueBidones.classList.toggle("d-none", cantidadBidones20L === 0);
+
+    actualizarTotalMostrado();
 
     if (resumenActual.modalidadSugerida === "delivery") {
       avisoEntrega.innerHTML = `<div class="aviso-entrega aviso-delivery"><i class="bi bi-truck"></i><span>Tu pedido califica para <strong>delivery</strong>: te lo llevamos hasta tu dirección.</span></div>`;
@@ -82,12 +107,31 @@ document.getElementById("formularioPedido").addEventListener("submit", async (e)
     ? tiposComprobante.find((t) => t.descripcion === "Factura")?.comprobante_id
     : tiposComprobante.find((t) => t.descripcion === "Boleta")?.comprobante_id;
 
+  if (checkFactura.checked) {
+    const ruc = document.getElementById("ruc").value.trim();
+    const razonSocial = document.getElementById("razonSocial").value.trim();
+    if (!ruc || !razonSocial) {
+      alert("Ingresa el RUC y la razón social para emitir factura.");
+      return;
+    }
+  }
+
   const datos = {
     items: pedido,
     metodoPagoId: parseInt(document.getElementById("metodoPagoId").value),
     comprobanteId: comprobanteId || 1,
     direccionEntrega: document.getElementById("direccion").value,
-    ubigeoId: ubigeoIdCliente
+    ubigeoId: ubigeoIdCliente,
+    ...(checkFactura.checked && {
+      ruc: document.getElementById("ruc").value.trim(),
+      razonSocial: document.getElementById("razonSocial").value.trim()
+    }),
+    ...(cantidadBidones20L > 0 && {
+      bidonesCompra: document.getElementById("bidonCompra").checked,
+      bidonesDevolucion: document.getElementById("bidonCompra").checked
+        ? null
+        : document.getElementById("devolucionBidon").value
+    })
   };
 
   btnConfirmar.disabled = true;
