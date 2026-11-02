@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { query } from "./db.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "clave_de_desarrollo_no_usar_en_produccion";
 const JWT_EXPIRA = "8h";
@@ -11,15 +12,22 @@ export function firmarToken(usuario) {
   );
 }
 
-export function requiereSesion(req, res, next) {
+export async function requiereSesion(req, res, next) {
   const token = req.cookies?.sesion;
   if (!token) return res.status(401).json({ error: "No has iniciado sesión." });
 
   try {
     req.usuario = jwt.verify(token, JWT_SECRET);
-    next();
   } catch {
     return res.status(401).json({ error: "Tu sesión expiró, inicia sesión nuevamente." });
+  }
+  try {
+    const { rows } = await query(`SELECT id, rol, es_admin_principal FROM usuarios WHERE id = $1`, [req.usuario.id]);
+    if (!rows[0] || rows[0].rol !== req.usuario.rol) return res.status(401).json({ error: "La cuenta ya no tiene acceso. Inicia sesión nuevamente." });
+    req.usuario.esAdminPrincipal = !!rows[0].es_admin_principal;
+    next();
+  } catch {
+    return res.status(503).json({ error: "No se pudo verificar la sesión. Inténtalo nuevamente." });
   }
 }
 

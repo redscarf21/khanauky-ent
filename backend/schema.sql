@@ -434,3 +434,13 @@ ALTER TABLE pedido ADD COLUMN IF NOT EXISTS dni_presencial VARCHAR(8)
   CHECK (dni_presencial IS NULL OR dni_presencial ~ '^[0-9]{8}$');
 ALTER TABLE pedido ADD COLUMN IF NOT EXISTS ruc_presencial VARCHAR(11);
 ALTER TABLE pedido ADD COLUMN IF NOT EXISTS razon_social_presencial VARCHAR(100);
+
+
+-- Revisión funcional: datos del pedido y trazabilidad de envases.
+ALTER TABLE delivery ALTER COLUMN transporte_id DROP NOT NULL;
+ALTER TABLE pedido ADD COLUMN IF NOT EXISTS nombre_contacto VARCHAR(150);
+ALTER TABLE pedido ADD COLUMN IF NOT EXISTS telefono_contacto VARCHAR(15);
+ALTER TABLE pedido ADD COLUMN IF NOT EXISTS cargo_bidones NUMERIC(10,2) NOT NULL DEFAULT 0;
+ALTER TABLE control_bidones ADD COLUMN IF NOT EXISTS pedido_id INT REFERENCES pedido(pedido_id);
+CREATE INDEX IF NOT EXISTS control_bidones_pedido_idx ON control_bidones(pedido_id);
+INSERT INTO estado_empleado (descripcion) VALUES ('Inactivo') ON CONFLICT (descripcion) DO NOTHING;

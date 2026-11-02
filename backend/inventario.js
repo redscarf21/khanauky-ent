@@ -1,4 +1,7 @@
+import { errorHttp } from "./validaciones.js";
+
 export async function asignarLotesFEFO(client, productoId, nombreProducto, cantidadNecesaria) {
+  if (!Number.isInteger(cantidadNecesaria) || cantidadNecesaria <= 0) throw errorHttp(400, "Cantidad de producto no válida.");
   const { rows: lotes } = await client.query(
     `SELECT lote_id, unidades_disponibles
      FROM produccion_lotes
@@ -22,7 +25,7 @@ export async function asignarLotesFEFO(client, productoId, nombreProducto, canti
   }
 
   if (restante > 0) {
-    throw new Error(
+    throw errorHttp(409,
       `Stock insuficiente para ${nombreProducto}. Faltan ${restante} unidad(es) disponibles.`
     );
   }

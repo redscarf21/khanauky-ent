@@ -10,6 +10,7 @@ import { fileURLToPath } from "url";
 import { pool, query, iniciarBD, generarCodigoOrden, conTransaccion } from "./db.js";
 import { calcularResumenVenta } from "./precios.js";
 import { asignarLotesFEFO } from "./inventario.js";
+import { validarItems, validarDinero, errorHttp } from "./validaciones.js";
 import { firmarToken, requiereSesion, requiereRol, requiereAdminPrincipal, obtenerUsuarioOpcional } from "./auth.js";
 import { verificarRecaptcha } from "./recaptcha.js";
 import { generarComprobantePDF } from "./factura.js";
@@ -399,6 +400,8 @@ app.post("/api/cotizar", requiereSesion, async (req, res) => {
       return res.status(400).json({ error: "No hay productos para cotizar." });
     }
 
+    validarItems(items);
+
     const tipoCliente = req.usuario.rol === "cliente"
       ? await getTipoCliente(req.usuario.id)
       : "PERSONA";
@@ -411,14 +414,14 @@ app.post("/api/cotizar", requiereSesion, async (req, res) => {
 
     const itemsConPrecio = items.map((item) => {
       const prod = productosDB.find((p) => p.producto_id === item.producto_id);
-      if (!prod) throw new Error(`Producto ${item.producto_id} no encontrado.`);
+      if (!prod) throw errorHttp(400, `Producto ${item.producto_id} no encontrado.`);
       return { ...prod, cantidad: item.cantidad, lote_id: item.lote_id || null };
     });
 
     res.json(calcularResumenVenta(itemsConPrecio, tipoCliente));
   } catch (error) {
     console.error("Error cotizar:", error);
-    res.status(500).json({ error: error.message || "Error al calcular el precio." });
+    res.status(error.status || 500).json({ error: error.message || "Error al calcular el precio." });
   }
 });
 
@@ -432,15 +435,34 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
       return res.status(403).json({ error: "Solo los clientes pueden registrar pedidos." });
     }
 
-    const { items, metodoPagoId, comprobanteId, direccionEntrega, ubigeoId, ruc, razonSocial, bidonesCompra, bidonesDevolucion } = req.body;
+    const { items, metodoPagoId, comprobanteId, direccionEntrega, ubigeoId, nombreContacto, telefonoContacto, ruc, razonSocial, bidonesCompra, bidonesDevolucion } = req.body;
 
     if (!Array.isArray(items) || items.length === 0 || !metodoPagoId) {
       return res.status(400).json({ error: "Completa todos los datos del pedido." });
     }
 
+    validarItems(items);
     const clienteId = await getClienteId(req.usuario.id);
     if (!clienteId) return res.status(404).json({ error: "Perfil de cliente no encontrado." });
 
+    const { rows: perfiles } = await query(`SELECT direccion, telefono, ubigeo_id FROM cliente WHERE cliente_id = $1`, [clienteId]);
+    const perfil = perfiles[0];
+    const contacto = String(nombreContacto ?? req.usuario.nombre ?? "").trim();
+    const telefono = String(telefonoContacto ?? perfil.telefono ?? "").trim();
+    const direccion = String(direccionEntrega ?? perfil.direccion ?? "").trim();
+    const zonaId = ubigeoId ?? perfil.ubigeo_id;
+    if (!contacto || contacto.length > 150 || !/^\d{9}$/.test(telefono)) {
+      throw errorHttp(400, "Ingresa el nombre de quien recibe y un teléfono de 9 dígitos.");
+    }
+    const { rows: tipos } = await query(`SELECT descripcion FROM tipo_comprobante WHERE comprobante_id = $1`, [comprobanteId || 1]);
+    if (!tipos[0]) throw errorHttp(400, "Comprobante no válido.");
+    const esFactura = tipos[0].descripcion.toLowerCase() === "factura";
+    if (esFactura && (typeof ruc !== "string" || !/^\d{11}$/.test(ruc) ||
+        typeof razonSocial !== "string" || !razonSocial.trim() || razonSocial.trim().length > 100)) {
+      throw errorHttp(400, "Ingresa un RUC de 11 dígitos y una razón social de hasta 100 caracteres.");
+    }
+    const { rows: pagos } = await query(`SELECT metodo_pago_id FROM metodo_pago WHERE metodo_pago_id = $1`, [metodoPagoId]);
+    if (!pagos[0]) throw errorHttp(400, "Selecciona un método de pago válido.");
     const tipoCliente = await getTipoCliente(req.usuario.id);
 
     const { rows: productosDB } = await query(
@@ -450,7 +472,7 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
 
     const itemsConPrecio = items.map((item) => {
       const prod = productosDB.find((p) => p.producto_id === item.producto_id);
-      if (!prod) throw new Error(`Producto ${item.producto_id} no encontrado.`);
+      if (!prod) throw errorHttp(400, `Producto ${item.producto_id} no encontrado.`);
       return { ...prod, cantidad: item.cantidad };
     });
 
@@ -462,7 +484,7 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
       .filter((i) => i.nombre === "Bidón de Agua 20L")
       .reduce((t, i) => t + i.cantidad, 0);
 
-    if (cantidadBidones20L > 0 && bidonesCompra === false && !bidonesDevolucion) {
+    if (cantidadBidones20L > 0 && (typeof bidonesCompra !== "boolean" || (!bidonesCompra && !["contra_entrega", "posterior"].includes(bidonesDevolucion)))) {
       return res.status(400).json({ error: "Indica si la devolución del bidón será contra entrega o posterior." });
     }
 
@@ -470,37 +492,29 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
     const totalFinal = Math.round((resumen.totalAPagar + cargoBidones) * 100) / 100;
 
     await conTransaccion(async (client) => {
-      if (ruc && razonSocial) {
-        await client.query(
-          `INSERT INTO empresa (cliente_id, razon_social, ruc)
-           VALUES ($1,$2,$3)
-           ON CONFLICT (cliente_id) DO UPDATE SET razon_social = EXCLUDED.razon_social, ruc = EXCLUDED.ruc`,
-          [clienteId, razonSocial, ruc]
-        );
-      }
-
       const { rows: estadoRows } = await client.query(
         `SELECT estado_id FROM estado_pedido WHERE descripcion = 'Venta Registrada'`
       );
       const estadoId = estadoRows[0]?.estado_id;
 
       let deliveryId = null;
-      if (resumen.modalidadSugerida === "delivery" && ubigeoId) {
+      if (resumen.modalidadSugerida === "delivery") {
+        if (!direccion || direccion.length > 150 || !Number.isInteger(zonaId)) {
+          throw errorHttp(400, "Completa la dirección de entrega y el distrito.");
+        }
         const { rows: delRows } = await client.query(
           `INSERT INTO delivery (direccion_entrega, ubigeo_id, transporte_id)
-           VALUES ($1, $2, (SELECT transporte_id FROM transporte WHERE estado_transporte_id =
-             (SELECT estado_transporte_id FROM estado_transporte WHERE descripcion = 'Operativo')
-             LIMIT 1))
+           VALUES ($1, $2, NULL)
            RETURNING delivery_id`,
-          [direccionEntrega || "", ubigeoId]
+          [direccion, zonaId]
         );
         deliveryId = delRows[0]?.delivery_id || null;
       }
 
       const { rows: pedidoRows } = await client.query(
-        `INSERT INTO pedido (codigo_orden, cliente_id, estado_id, delivery_id)
-         VALUES ($1,$2,$3,$4) RETURNING pedido_id`,
-        [codigoOrden, clienteId, estadoId, deliveryId]
+        `INSERT INTO pedido (codigo_orden, cliente_id, estado_id, delivery_id, nombre_contacto, telefono_contacto, cargo_bidones, ruc_presencial, razon_social_presencial)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING pedido_id`,
+        [codigoOrden, clienteId, estadoId, deliveryId, contacto, telefono, cargoBidones, esFactura ? ruc : null, esFactura ? razonSocial.trim() : null]
       );
       const pedidoId = pedidoRows[0].pedido_id;
 
@@ -519,18 +533,18 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
       if (cantidadBidones20L > 0) {
         const entregados = cantidadBidones20L;
         const recibidos = bidonesCompra ? 0 : (bidonesDevolucion === "contra_entrega" ? cantidadBidones20L : 0);
-        const prestados = bidonesCompra ? 0 : (bidonesDevolucion === "posterior" ? cantidadBidones20L : 0);
+        const prestados = bidonesCompra ? 0 : cantidadBidones20L;
 
         await client.query(
-          `INSERT INTO control_bidones (cantidad_entregados, cantidad_recibidos, cantidad_prestados, delivery_id, cliente_id)
-           VALUES ($1,$2,$3,$4,$5)`,
-          [entregados, recibidos, prestados, deliveryId, clienteId]
+          `INSERT INTO control_bidones (cantidad_entregados, cantidad_recibidos, cantidad_prestados, delivery_id, cliente_id, pedido_id)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [entregados, recibidos, prestados, deliveryId, clienteId, pedidoId]
         );
       }
 
       const { rows: ventaRows } = await client.query(
-        `INSERT INTO venta (pedido_id, comprobante_id, total_pago)
-         VALUES ($1,$2,$3) RETURNING venta_id`,
+        `INSERT INTO venta (pedido_id, comprobante_id, total_pago, saldo_pendiente)
+         VALUES ($1,$2,$3,$3) RETURNING venta_id`,
         [pedidoId, comprobanteId || 1, totalFinal]
       );
       const ventaId = ventaRows[0].venta_id;
@@ -538,10 +552,11 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
       await client.query(
         `INSERT INTO detalle_pago (venta_id, metodo_pago_id, monto_pagado)
          VALUES ($1,$2,$3)`,
-        [ventaId, metodoPagoId, totalFinal]
+        [ventaId, metodoPagoId, 0]
       );
     });
 
+    try {
     const { rows: userRows } = await query(
       `SELECT email FROM usuarios WHERE id = $1`,
       [req.usuario.id]
@@ -552,6 +567,8 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
       ).catch(() => { });
     }
 
+    } catch (errorCorreo) { console.error("No se pudo preparar el correo del pedido:", errorCorreo.message); }
+
     res.status(201).json({
       mensaje: "Pedido registrado",
       orden: codigoOrden,
@@ -561,7 +578,7 @@ app.post("/api/pedidos", requiereSesion, async (req, res) => {
     });
   } catch (error) {
     console.error("Error pedido:", error);
-    res.status(500).json({ error: error.message || "Error al procesar el pedido." });
+    res.status(error.status || 500).json({ error: error.message || "Error al procesar el pedido." });
   }
 });
 
@@ -600,12 +617,13 @@ app.get("/api/pedidos/:codigo/comprobante", requiereSesion, async (req, res) => 
     const { rows } = await query(`
       SELECT p.*, v.total_pago, v.descuento_aplicado, v.saldo_pendiente,
              tc.descripcion AS tipo_comprobante,
-             c.cliente_id, c.tipo_cliente, c.direccion, c.telefono,
-             ub.distrito, ub.provincia, ub.departamento,
+             c.cliente_id, c.tipo_cliente, c.direccion, COALESCE(p.telefono_contacto, c.telefono) AS telefono,
+             ub.distrito, ub.provincia, ub.departamento, d.direccion_entrega,
              pe.nombres, pe.apellidos, pe.dni,
              em.razon_social, em.ruc,
              ep.descripcion AS estado
       FROM pedido p
+      LEFT JOIN delivery d ON d.delivery_id = p.delivery_id
       LEFT JOIN cliente c ON c.cliente_id = p.cliente_id
       LEFT JOIN ubigeo ub ON ub.ubigeo_id = c.ubigeo_id
       LEFT JOIN persona pe ON pe.cliente_id = c.cliente_id
@@ -641,6 +659,9 @@ app.get("/api/pedidos/:codigo/comprobante", requiereSesion, async (req, res) => 
       WHERE dp.pedido_id = $1
     `, [pedido.pedido_id]);
 
+    if (Number(pedido.cargo_bidones) > 0) {
+      items.push({ cantidad: 1, precio: Number(pedido.cargo_bidones), sub_total: Number(pedido.cargo_bidones), nombre: "Compra de envases de bidón 20L" });
+    }
     const pedidoFormateado = {
       codigoOrden: pedido.codigo_orden,
       cliente: pedido.cliente_id == null
@@ -651,7 +672,7 @@ app.get("/api/pedidos/:codigo/comprobante", requiereSesion, async (req, res) => 
       ruc: pedido.ruc_presencial || pedido.ruc || null,
       razonSocial: pedido.razon_social_presencial || pedido.razon_social || null,
       dni: pedido.dni_presencial || pedido.dni || null,
-      direccion: [pedido.distrito, pedido.provincia, pedido.departamento].filter(Boolean).join(", "),
+      direccion: pedido.direccion_entrega || [pedido.distrito, pedido.provincia, pedido.departamento].filter(Boolean).join(", "),
       telefono: pedido.telefono,
       tipoComprobante: pedido.tipo_comprobante,
       metodopago: "Varios",
@@ -688,13 +709,14 @@ app.post("/api/ventas-presenciales", requiereRol("empleado"), async (req, res) =
   try {
     const {
       clienteId = null, dni = null, items, metodoPagoId, comprobanteId,
-      descuento = 0, montoPagado, eVentaId, ruc, razonSocial
+      descuento = 0, montoPagado, ruc, razonSocial
     } = req.body;
 
     if (!Array.isArray(items) || items.length === 0 || !metodoPagoId) {
       return res.status(400).json({ error: "Faltan datos para registrar la venta." });
     }
 
+    validarItems(items);
     const dniVenta = typeof dni === "string" ? dni.trim() : dni;
     if (dniVenta !== null && (typeof dniVenta !== "string" || !/^\d{8}$/.test(dniVenta))) {
       return res.status(400).json({ error: "El DNI debe tener exactamente 8 dígitos, o ser null para continuar sin DNI." });
@@ -736,15 +758,23 @@ app.post("/api/ventas-presenciales", requiereRol("empleado"), async (req, res) =
     }
     const itemsConPrecio = items.map((item) => {
       const prod = productosDB.find((p) => p.producto_id === item.producto_id);
-      if (!prod) throw new Error(`Producto ${item.producto_id} no encontrado.`);
+      if (!prod) throw errorHttp(400, `Producto ${item.producto_id} no encontrado.`);
       return { ...prod, cantidad: item.cantidad };
     });
 
+    const { rows: vendedores } = await query(
+      `SELECT ev.empleado_id FROM e_venta ev JOIN empleado e ON e.empleado_id = ev.empleado_id WHERE e.usuario_id = $1`, [req.usuario.id]
+    );
+    const eVentaId = vendedores[0]?.empleado_id || null;
+    validarDinero(descuento, "descuento");
+    if (montoPagado != null) validarDinero(montoPagado, "monto pagado");
     const resumen = calcularResumenVenta(itemsConPrecio, tipoCliente);
     const codigoOrden = generarCodigoOrden();
 
-    const totalConDescuento = Math.max(0, resumen.totalAPagar - Number(descuento));
-    const saldoPendiente = Math.max(0, totalConDescuento - Number(montoPagado ?? totalConDescuento));
+    if (Number(descuento) > resumen.totalAPagar) throw errorHttp(400, "El descuento no puede superar el total.");
+    const totalConDescuento = Math.round((resumen.totalAPagar - Number(descuento)) * 100) / 100;
+    if (montoPagado != null && Number(montoPagado) > totalConDescuento) throw errorHttp(400, "El monto pagado no puede superar el total de la venta.");
+    const saldoPendiente = Math.round((totalConDescuento - Number(montoPagado ?? totalConDescuento)) * 100) / 100;
 
     await conTransaccion(async (client) => {
       const { rows: estadoRows } = await client.query(
@@ -793,34 +823,46 @@ app.post("/api/ventas-presenciales", requiereRol("empleado"), async (req, res) =
     });
   } catch (error) {
     console.error("Error venta presencial:", error);
-    res.status(500).json({ error: error.message || "Error al registrar la venta." });
+    res.status(error.status || 500).json({ error: error.message || "Error al registrar la venta." });
   }
 });
 
 app.post("/api/ventas/:ventaId/pago-parcial", requiereRol("empleado"), async (req, res) => {
   try {
     const { metodoPagoId, monto, numeroOperacion } = req.body;
-    const ventaId = parseInt(req.params.ventaId);
-
-    const { rows } = await query(`SELECT * FROM venta WHERE venta_id = $1`, [ventaId]);
-    const venta = rows[0];
-    if (!venta) return res.status(404).json({ error: "Venta no encontrada." });
-
-    await query(
-      `INSERT INTO detalle_pago (venta_id, metodo_pago_id, monto_pagado, numero_operacion_transferencia)
-       VALUES ($1,$2,$3,$4)`,
-      [ventaId, metodoPagoId, monto, numeroOperacion || null]
-    );
-
-    const nuevoSaldo = Math.max(0, Number(venta.saldo_pendiente) - Number(monto));
-    await query(`UPDATE venta SET saldo_pendiente = $1 WHERE venta_id = $2`, [nuevoSaldo, ventaId]);
-
+    validarDinero(monto, "abono", false);
+    if (!Number.isInteger(metodoPagoId) || metodoPagoId <= 0) throw errorHttp(400, "Selecciona un método de pago.");
+    const ventaId = Number(req.params.ventaId);
+    if (!Number.isInteger(ventaId) || ventaId <= 0) throw errorHttp(400, "Venta no válida.");
+    const nuevoSaldo = await conTransaccion(async (client) => {
+      const { rows: pedidos } = await client.query(
+        `SELECT p.pedido_id, ep.descripcion AS estado FROM pedido p
+         JOIN estado_pedido ep ON ep.estado_id = p.estado_id
+         WHERE p.pedido_id = (SELECT pedido_id FROM venta WHERE venta_id = $1) FOR UPDATE OF p`, [ventaId]
+      );
+      if (!pedidos[0]) throw errorHttp(404, "Venta no encontrada.");
+      if (pedidos[0].estado === "Cancelado") throw errorHttp(409, "No puedes cobrar un pedido cancelado.");
+      const { rows } = await client.query(`SELECT * FROM venta WHERE venta_id = $1 FOR UPDATE`, [ventaId]);
+      const venta = rows[0];
+      const saldoCentimos = Math.round(Number(venta.saldo_pendiente) * 100);
+      const abonoCentimos = Math.round(Number(monto) * 100);
+      if (abonoCentimos > saldoCentimos) throw errorHttp(400, "El abono supera el saldo pendiente.");
+      await client.query(
+        `INSERT INTO detalle_pago (venta_id, metodo_pago_id, monto_pagado, numero_operacion_transferencia) VALUES ($1,$2,$3,$4)`,
+        [ventaId, metodoPagoId, monto, numeroOperacion || null]
+      );
+      const saldo = (saldoCentimos - abonoCentimos) / 100;
+      await client.query(`UPDATE venta SET saldo_pendiente = $1 WHERE venta_id = $2`, [saldo, ventaId]);
+      if (saldo === 0 && pedidos[0].estado === "Venta Registrada") {
+        await client.query(`UPDATE pedido SET estado_id = (SELECT estado_id FROM estado_pedido WHERE descripcion = 'Pago Confirmado') WHERE pedido_id = $1`, [pedidos[0].pedido_id]);
+      }
+      return saldo;
+    });
     res.json({ mensaje: "Pago registrado", saldoPendiente: nuevoSaldo });
   } catch (error) {
-    res.status(500).json({ error: "Error al registrar el pago." });
+    res.status(error.status || 500).json({ error: error.status ? error.message : "Error al registrar el pago." });
   }
 });
-
 // ============================================================
 // 8. ADMIN — PEDIDOS Y REPORTES
 // ============================================================
@@ -862,17 +904,47 @@ app.get("/api/pedidos", requiereRol("empleado"), async (req, res) => {
 app.patch("/api/pedidos/:codigo/estado", requiereRol("empleado"), async (req, res) => {
   try {
     const { estadoId } = req.body;
-    const { rows } = await query(
-      `UPDATE pedido SET estado_id = $1 WHERE codigo_orden = $2 RETURNING codigo_orden`,
-      [estadoId, req.params.codigo]
-    );
-    if (rows.length === 0) return res.status(404).json({ error: "Pedido no encontrado." });
-    res.json({ mensaje: "Estado actualizado", codigoOrden: rows[0].codigo_orden });
+    if (!Number.isInteger(estadoId)) throw errorHttp(400, "Estado no válido.");
+    await conTransaccion(async (client) => {
+      const { rows } = await client.query(
+        `SELECT p.*, ep.descripcion AS estado FROM pedido p JOIN estado_pedido ep ON ep.estado_id = p.estado_id WHERE p.codigo_orden = $1 FOR UPDATE OF p`, [req.params.codigo]
+      );
+      const pedido = rows[0];
+      if (!pedido) throw errorHttp(404, "Pedido no encontrado.");
+      const { rows: estados } = await client.query(`SELECT descripcion FROM estado_pedido WHERE estado_id = $1`, [estadoId]);
+      const destino = estados[0]?.descripcion;
+      if (!destino) throw errorHttp(400, "Estado no válido.");
+      if (pedido.estado === destino) return;
+      if (["Cancelado", "Entregado"].includes(pedido.estado)) throw errorHttp(409, "Un pedido finalizado no puede cambiar de estado.");
+      const { rows: ventas } = await client.query(`SELECT * FROM venta WHERE pedido_id = $1 FOR UPDATE`, [pedido.pedido_id]);
+      const venta = ventas[0];
+      if (!venta) throw errorHttp(409, "El pedido no tiene una venta asociada.");
+      if (destino === "Cancelado") {
+        const { rows: pagos } = await client.query(`SELECT COALESCE(SUM(monto_pagado),0) AS cobrado FROM detalle_pago WHERE venta_id = $1`, [venta.venta_id]);
+        if (Number(pagos[0].cobrado) > 0) throw errorHttp(409, "El pedido tiene cobros. Requiere gestionar su devolución antes de anularlo.");
+        const { rows: lotes } = await client.query(`SELECT lote_id, SUM(cantidad)::int AS cantidad FROM detalle_pedido WHERE pedido_id = $1 GROUP BY lote_id ORDER BY lote_id`, [pedido.pedido_id]);
+        for (const lote of lotes) {
+          await client.query(`UPDATE produccion_lotes SET unidades_disponibles = unidades_disponibles + $1 WHERE lote_id = $2`, [lote.cantidad, lote.lote_id]);
+        }
+        await client.query(`DELETE FROM control_bidones WHERE pedido_id = $1`, [pedido.pedido_id]);
+        await client.query(`UPDATE venta SET estado = 'Cancelado', saldo_pendiente = 0 WHERE pedido_id = $1`, [pedido.pedido_id]);
+      } else {
+        const permitidos = { "Venta Registrada": ["Pago Confirmado", "Entregado"], "Pago Confirmado": ["Entregado"] };
+        if (!permitidos[pedido.estado]?.includes(destino)) throw errorHttp(409, "Ese cambio de estado no está permitido.");
+        if (Number(venta.saldo_pendiente) > 0) throw errorHttp(409, "Registra el cobro pendiente antes de confirmar el pago o entregar el pedido.");
+        if (destino === "Entregado" && pedido.delivery_id) {
+          const { rows: entregas } = await client.query(`SELECT transporte_id, hora_salida FROM delivery WHERE delivery_id = $1 FOR UPDATE`, [pedido.delivery_id]);
+          if (!entregas[0]?.transporte_id || !entregas[0]?.hora_salida) throw errorHttp(409, "Asigna transporte y registra la salida en Entregas antes de finalizar el pedido.");
+          await client.query(`UPDATE delivery SET hora_entrega = COALESCE(hora_entrega, CURRENT_TIME) WHERE delivery_id = $1`, [pedido.delivery_id]);
+        }
+      }
+      await client.query(`UPDATE pedido SET estado_id = $1 WHERE pedido_id = $2`, [estadoId, pedido.pedido_id]);
+    });
+    res.json({ mensaje: "Estado actualizado", orden: req.params.codigo });
   } catch (error) {
-    res.status(500).json({ error: "Error al actualizar el pedido." });
+    res.status(error.status || 500).json({ error: error.status ? error.message : "Error al actualizar el estado." });
   }
 });
-
 app.get("/api/pedidos/buscar/:dato", requiereRol("empleado"), async (req, res) => {
   try {
     const dato = req.params.dato;
@@ -910,6 +982,8 @@ app.get("/api/reportes/mensual", requiereRol("empleado"), async (req, res) => {
              COALESCE(SUM(v.total_pago), 0) AS total_ventas
       FROM pedido p
       LEFT JOIN venta v ON v.pedido_id = p.pedido_id
+      JOIN estado_pedido ep ON ep.estado_id = p.estado_id
+      WHERE ep.descripcion <> 'Cancelado'
       GROUP BY mes ORDER BY mes DESC LIMIT 12
     `);
     res.json(rows.map((r) => ({
@@ -951,6 +1025,11 @@ app.post("/api/lotes", requiereRol("empleado"), async (req, res) => {
       unidadesProducidas, unidadesDefectuosas = 0, fechaVencimiento
     } = req.body;
 
+    if (!Number.isInteger(productoId) || !Number.isInteger(unidadesProducidas) || unidadesProducidas <= 0 ||
+        !Number.isInteger(unidadesDefectuosas) || unidadesDefectuosas < 0 || unidadesDefectuosas > unidadesProducidas ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(fechaProduccion || "") || !/^\d{4}-\d{2}-\d{2}$/.test(fechaVencimiento || "") || fechaVencimiento <= fechaProduccion) {
+      throw errorHttp(400, "Revisa las cantidades y las fechas: los defectuosos no pueden superar lo producido y el vencimiento debe ser posterior a la producción.");
+    }
     const unidadesNetas = unidadesProducidas - unidadesDefectuosas;
 
     const { rows } = await query(`
@@ -964,26 +1043,30 @@ app.post("/api/lotes", requiereRol("empleado"), async (req, res) => {
     );
     res.status(201).json(rows[0]);
   } catch (error) {
-    res.status(500).json({ error: "Error al crear lote." });
+    res.status(error.status || 500).json({ error: error.status ? error.message : "Error al crear lote. Revisa el producto y las fechas." });
   }
 });
 
 app.patch("/api/lotes/:id", requiereRol("empleado"), async (req, res) => {
   try {
     const { unidadesDisponibles, estado, fechaVencimiento } = req.body;
+    if (unidadesDisponibles != null && (!Number.isInteger(unidadesDisponibles) || unidadesDisponibles < 0)) throw errorHttp(400, "Las unidades disponibles deben ser un entero no negativo.");
+    if (estado != null && !["Disponible", "Agotado", "Dañado / no vendible", "Retirado"].includes(estado)) throw errorHttp(400, "Estado de lote no válido.");
     const { rows } = await query(
       `UPDATE produccion_lotes
        SET unidades_disponibles = COALESCE($1, unidades_disponibles),
            estado = COALESCE($2, estado),
            fecha_vencimiento = COALESCE($3, fecha_vencimiento)
        WHERE lote_id = $4
+         AND COALESCE($1, unidades_disponibles) <= unidades_netas
+         AND COALESCE($3, fecha_vencimiento) > fecha_produccion
        RETURNING *`,
       [unidadesDisponibles, estado, fechaVencimiento, req.params.id]
     );
-    if (!rows[0]) return res.status(404).json({ error: "Lote no encontrado." });
+    if (!rows[0]) return res.status(404).json({ error: "Lote no encontrado o cantidades/fechas fuera del rango permitido." });
     res.json(rows[0]);
   } catch (error) {
-    res.status(500).json({ error: "Error al actualizar el lote." });
+    res.status(error.status || 500).json({ error: error.status ? error.message : "Error al actualizar el lote." });
   }
 });
 
@@ -1018,7 +1101,7 @@ app.get("/api/transportes", requiereRol("empleado"), async (req, res) => {
              tt.descripcion AS tipo,
              et.descripcion AS estado
       FROM transporte t
-      JOIN tipo_transporte tt ON tt.tipo_id = t.tipo_id
+      LEFT JOIN tipo_transporte tt ON tt.tipo_id = t.tipo_id
       JOIN estado_transporte et ON et.estado_transporte_id = t.estado_transporte_id
       ORDER BY t.transporte_id
     `);
@@ -1068,20 +1151,22 @@ app.get("/api/deliveries", requiereRol("empleado"), async (req, res) => {
              tt.descripcion AS tipo_transporte,
              p.codigo_orden, p.estado_id,
              ep.descripcion AS estado_pedido,
-             CASE WHEN c.tipo_cliente = 'PERSONA'
+             CASE WHEN p.nombre_contacto IS NOT NULL THEN p.nombre_contacto
+               WHEN c.tipo_cliente = 'PERSONA'
                THEN pe.nombres || ' ' || pe.apellidos
                ELSE em.razon_social
              END AS cliente_nombre,
-             c.telefono
+             COALESCE(p.telefono_contacto, c.telefono) AS telefono
       FROM delivery d
       JOIN ubigeo ub ON ub.ubigeo_id = d.ubigeo_id
-      JOIN transporte t ON t.transporte_id = d.transporte_id
-      JOIN tipo_transporte tt ON tt.tipo_id = t.tipo_id
+      LEFT JOIN transporte t ON t.transporte_id = d.transporte_id
+      LEFT JOIN tipo_transporte tt ON tt.tipo_id = t.tipo_id
       LEFT JOIN pedido p ON p.delivery_id = d.delivery_id
       LEFT JOIN estado_pedido ep ON ep.estado_id = p.estado_id
       LEFT JOIN cliente c ON c.cliente_id = p.cliente_id
       LEFT JOIN persona pe ON pe.cliente_id = c.cliente_id
       LEFT JOIN empresa em ON em.cliente_id = c.cliente_id
+      WHERE ep.descripcion <> 'Cancelado'
       ORDER BY ub.distrito, d.fecha DESC
     `);
     res.json(rows);
@@ -1090,35 +1175,42 @@ app.get("/api/deliveries", requiereRol("empleado"), async (req, res) => {
   }
 });
 
-app.patch("/api/deliveries/:id/transporte", requiereRol("empleado"), async (req, res) => {
-  try {
-    const { transporteId } = req.body;
-    const { rows } = await query(
-      `UPDATE delivery SET transporte_id = $1 WHERE delivery_id = $2 RETURNING delivery_id`,
-      [transporteId, req.params.id]
-    );
-    if (!rows[0]) return res.status(404).json({ error: "Delivery no encontrado." });
-    res.json({ mensaje: "Transporte reasignado." });
-  } catch (error) {
-    res.status(500).json({ error: "Error al reasignar transporte." });
-  }
-});
-
 app.patch("/api/deliveries/:id", requiereRol("empleado"), async (req, res) => {
   try {
-    const { horaSalida, horaEntrega } = req.body;
-    await query(
-      `UPDATE delivery SET hora_salida = COALESCE($1, hora_salida),
-       hora_entrega = COALESCE($2, hora_entrega)
-       WHERE delivery_id = $3`,
-      [horaSalida || null, horaEntrega || null, req.params.id]
-    );
+    const { horaSalida, horaEntrega, transporteId } = req.body;
+    for (const hora of [horaSalida, horaEntrega]) {
+      if (hora != null && !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(hora)) throw errorHttp(400, "Hora no válida.");
+    }
+    await conTransaccion(async (client) => {
+      const { rows: pedidos } = await client.query(`SELECT p.*, ep.descripcion AS estado FROM pedido p JOIN estado_pedido ep ON ep.estado_id = p.estado_id WHERE p.delivery_id = $1 FOR UPDATE OF p`, [req.params.id]);
+      const pedido = pedidos[0];
+      if (!pedido) throw errorHttp(404, "Pedido de delivery no encontrado.");
+      if (pedido.estado === "Cancelado") throw errorHttp(409, "El pedido está cancelado.");
+      const { rows } = await client.query(`SELECT * FROM delivery WHERE delivery_id = $1 FOR UPDATE`, [req.params.id]);
+      const delivery = rows[0];
+      const transporte = transporteId === undefined ? delivery.transporte_id : transporteId;
+      if (transporte != null) {
+        if (!Number.isInteger(transporte) || transporte <= 0) throw errorHttp(400, "Transporte no válido.");
+        const { rows: vehiculos } = await client.query(`SELECT t.transporte_id FROM transporte t JOIN estado_transporte et ON et.estado_transporte_id = t.estado_transporte_id WHERE t.transporte_id = $1 AND et.descripcion = 'Operativo'`, [transporte]);
+        if (!vehiculos[0]) throw errorHttp(400, "Selecciona un transporte operativo.");
+      }
+      const salida = horaSalida === undefined ? delivery.hora_salida : horaSalida;
+      const entrega = horaEntrega === undefined ? delivery.hora_entrega : horaEntrega;
+      if ((salida || entrega) && !transporte) throw errorHttp(400, "Asigna un transporte antes de registrar la salida o entrega.");
+      if (entrega && !salida) throw errorHttp(400, "Registra primero la hora de salida.");
+      if (pedido.estado === "Entregado" && !entrega) throw errorHttp(409, "No se puede borrar la entrega de un pedido finalizado.");
+      if (entrega) {
+        const { rows: ventas } = await client.query(`SELECT saldo_pendiente FROM venta WHERE pedido_id = $1 FOR UPDATE`, [pedido.pedido_id]);
+        if (!ventas[0] || Number(ventas[0].saldo_pendiente) > 0) throw errorHttp(409, "Registra el cobro pendiente antes de confirmar la entrega.");
+        await client.query(`UPDATE pedido SET estado_id = (SELECT estado_id FROM estado_pedido WHERE descripcion = 'Entregado') WHERE pedido_id = $1`, [pedido.pedido_id]);
+      }
+      await client.query(`UPDATE delivery SET transporte_id = $1, hora_salida = $2, hora_entrega = $3 WHERE delivery_id = $4`, [transporte, salida, entrega, req.params.id]);
+    });
     res.json({ mensaje: "Delivery actualizado." });
   } catch (error) {
-    res.status(500).json({ error: "Error al actualizar delivery." });
+    res.status(error.status || 500).json({ error: error.status ? error.message : "Error al actualizar delivery." });
   }
 });
-
 // ============================================================
 // 12. ADMIN — CONTROL DE BIDONES
 // ============================================================
@@ -1172,7 +1264,7 @@ app.get("/api/empleados", requiereRol("empleado"), async (req, res) => {
              tc.descripcion AS tipo_contrato, tc.sueldo,
              ee.descripcion AS estado,
              ub.distrito, ub.provincia,
-             u.usuario, u.email, u.es_admin_principal
+             u.id AS usuario_id, u.usuario, u.email, u.es_admin_principal
       FROM empleado e
       JOIN tipo_contrato tc ON tc.tipo_contrato_id = e.tipo_contrato_id
       JOIN estado_empleado ee ON ee.estado_empleado_id = e.estado_empleado_id
@@ -1197,6 +1289,13 @@ app.post("/api/empleados", requiereRol("empleado"), async (req, res) => {
       numeroLicencia, fechaVencimientoLicencia
     } = req.body;
 
+    if (![nombres, apellidos, usuario, email, telefono].every(v => typeof v === "string" && v.trim()) ||
+        typeof pass !== "string" || pass.length < 6 || !/^\d{8}$/.test(dni || "") || !["M", "F"].includes(sexo) ||
+        !["VENTA", "PRODUCCION", "ENTREGA"].includes(tipoEmpleado) || !Number.isInteger(tipoContratoId) || !Number.isInteger(ubigeoId) || !fechaContratacion) {
+      throw errorHttp(400, "Completa los datos del empleado, DNI de 8 dígitos y contraseña de al menos 6 caracteres.");
+    }
+    if (tipoEmpleado === "PRODUCCION" && (!carnetSanidad || !fechaVencimientoCarnet)) throw errorHttp(400, "Completa el carnet de sanidad y su vencimiento.");
+    if (tipoEmpleado === "ENTREGA" && (!numeroLicencia || !fechaVencimientoLicencia)) throw errorHttp(400, "Completa la licencia y su vencimiento.");
     const passHash = await bcrypt.hash(pass, 10);
 
     await conTransaccion(async (client) => {
@@ -1239,31 +1338,25 @@ app.post("/api/empleados", requiereRol("empleado"), async (req, res) => {
     res.status(201).json({ mensaje: "Empleado creado correctamente." });
   } catch (error) {
     console.error("Error crear empleado:", error);
-    res.status(500).json({ error: "Error al crear el empleado. Ningún dato quedó guardado, puedes intentar de nuevo." });
+    res.status(error.status || (error.code === "23505" ? 409 : 500)).json({ error: error.status ? error.message : error.code === "23505" ? "Ya existe el usuario, correo o DNI ingresado." : "Error al crear el empleado. Ningún dato quedó guardado, revisa los campos." });
   }
 });
 
 app.delete("/api/empleados/:id", requiereAdminPrincipal, async (req, res) => {
   try {
-    const idEliminar = parseInt(req.params.id);
-    if (idEliminar === req.usuario.id) {
-      return res.status(400).json({ error: "No puedes eliminar tu propia cuenta." });
-    }
-    const { rows } = await query(
-      `SELECT u.es_admin_principal FROM empleado e JOIN usuarios u ON u.id = e.usuario_id WHERE e.empleado_id = $1`,
-      [idEliminar]
-    );
-    if (!rows[0]) return res.status(404).json({ error: "Empleado no encontrado." });
-    if (rows[0].es_admin_principal) {
-      return res.status(400).json({ error: "No se puede eliminar al administrador principal." });
-    }
-    await query(`DELETE FROM empleado WHERE empleado_id = $1`, [idEliminar]);
-    res.json({ mensaje: "Empleado eliminado correctamente." });
+    await conTransaccion(async (client) => {
+      const { rows } = await client.query(`SELECT e.usuario_id, u.es_admin_principal FROM empleado e JOIN usuarios u ON u.id = e.usuario_id WHERE e.empleado_id = $1 FOR UPDATE OF e, u`, [req.params.id]);
+      const empleado = rows[0];
+      if (!empleado) throw errorHttp(404, "Empleado sin cuenta de acceso o no encontrado.");
+      if (empleado.usuario_id === req.usuario.id || empleado.es_admin_principal) throw errorHttp(400, "No puedes eliminar tu cuenta ni la del administrador principal.");
+      await client.query(`UPDATE empleado SET estado_empleado_id = (SELECT estado_empleado_id FROM estado_empleado WHERE descripcion = 'Inactivo') WHERE empleado_id = $1`, [req.params.id]);
+      await client.query(`DELETE FROM usuarios WHERE id = $1`, [empleado.usuario_id]);
+    });
+    res.json({ mensaje: "Cuenta eliminada. Se conserva el historial del empleado." });
   } catch (error) {
-    res.status(500).json({ error: "Error al eliminar empleado." });
+    res.status(error.status || 500).json({ error: error.status ? error.message : "Error al eliminar la cuenta." });
   }
 });
-
 app.post("/api/empleados/:id/asignar-password", requiereAdminPrincipal, async (req, res) => {
   try {
     const { rows } = await query(
@@ -1278,7 +1371,7 @@ app.post("/api/empleados/:id/asignar-password", requiereAdminPrincipal, async (r
     await query(`UPDATE usuarios SET pass_hash = $1 WHERE id = $2`, [passHash, empleado.id]);
 
     if (empleado.email) {
-      await enviarCorreoNuevaPassAsignada(empleado.email, empleado.nombre, passTemporal);
+      await enviarCorreoNuevaPassAsignada(empleado.email, empleado.nombre, passTemporal).catch((err) => console.error("No se pudo enviar la contraseña por correo:", err.message));
     }
 
     res.json({ mensaje: "Contraseña reasignada.", passTemporal });
@@ -1358,15 +1451,18 @@ app.get("/api/tipos-contrato", requiereRol("empleado"), async (req, res) => {
 app.get("/api/sucursales/resumen-ingresos", requiereRol("empleado"), async (req, res) => {
   try {
     const { rows } = await query(`
-      SELECT ub.ubigeo_id, ub.distrito, ub.provincia,
+      SELECT ub.ubigeo_id, COALESCE(ub.distrito, 'Venta sin zona registrada') AS distrito,
+             COALESCE(ub.provincia, '') AS provincia,
              COUNT(p.pedido_id) AS total_pedidos,
              COALESCE(SUM(v.total_pago), 0) AS total_ingresos
-      FROM ubigeo ub
-      LEFT JOIN cliente c ON c.ubigeo_id = ub.ubigeo_id
-      LEFT JOIN pedido p ON p.cliente_id = c.cliente_id
+      FROM pedido p
+      JOIN estado_pedido ep ON ep.estado_id = p.estado_id
+      LEFT JOIN cliente c ON c.cliente_id = p.cliente_id
+      LEFT JOIN delivery d ON d.delivery_id = p.delivery_id
+      LEFT JOIN ubigeo ub ON ub.ubigeo_id = COALESCE(d.ubigeo_id, c.ubigeo_id)
       LEFT JOIN venta v ON v.pedido_id = p.pedido_id
+      WHERE ep.descripcion <> 'Cancelado'
       GROUP BY ub.ubigeo_id, ub.distrito, ub.provincia
-      HAVING COUNT(p.pedido_id) > 0
       ORDER BY total_ingresos DESC
     `);
     res.json(rows.map((r) => ({
