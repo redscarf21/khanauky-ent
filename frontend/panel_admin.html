@@ -185,18 +185,27 @@
         <section id="sec-registro" class="seccion-admin">
           <h4 class="mb-4">Registrar venta presencial</h4>
 
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Buscar cliente (DNI, RUC, nombre o teléfono)</label>
-            <div class="d-flex gap-2">
-              <input type="text" class="form-control" id="inputBuscarCliente" placeholder="Ej. 45678912">
-              <button type="button" class="btn-khanauky-primario" id="btnBuscarCliente">Buscar</button>
-            </div>
-            <div id="resultadoBuscarCliente" class="mt-2"></div>
-            <p class="small text-mid mt-1">Cliente seleccionado: <strong id="ventaClienteNombre">—</strong></p>
-            <input type="hidden" id="ventaClienteId">
-          </div>
-
           <form id="formVentaPresencial">
+            <fieldset class="mb-4">
+              <legend class="fs-6 fw-semibold">Cliente presencial</legend>
+              <p class="small text-mid">No necesita una cuenta. Puedes registrar la venta con DNI o sin DNI.</p>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="identificacionVenta" id="ventaSinDni" value="sin-dni" checked>
+                <label class="form-check-label" for="ventaSinDni">Continuar sin DNI</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="identificacionVenta" id="ventaConDni" value="con-dni">
+                <label class="form-check-label" for="ventaConDni">Ingresar DNI</label>
+              </div>
+              <div id="bloqueDniVenta" class="mt-3 d-none">
+                <label class="form-label" for="ventaDni">DNI del cliente</label>
+                <input type="text" class="form-control" id="ventaDni" inputmode="numeric"
+                       maxlength="8" pattern="[0-9]{8}" placeholder="Ej. 45678912" disabled
+                       aria-describedby="ayudaDniVenta">
+                <div id="ayudaDniVenta" class="form-text">Ingresa 8 dígitos. Se guardará en esta venta; no se creará una cuenta.</div>
+              </div>
+            </fieldset>
+
             <div class="mb-3">
               <label class="form-label fw-semibold">Productos</label>
               <div id="itemsVenta"></div>

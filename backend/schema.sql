@@ -426,3 +426,11 @@ INSERT INTO producto (nombre_producto, descripcion, precio_minorista, precio_may
 ('Hielo en Bolsa 1.5kg',   'Hielo Aquaelis Ice, tratado con los mismos estándares de pureza.', 4.00, 3.50, 3, 4, 'hielo-1-5kg.jpg'),
 ('Hielo en Bolsa 3kg',     'Formato grande de hielo Aquaelis Ice, ideal para eventos.',      7.50,  6.50, 3, 5, 'hielo-3kg.jpg')
 ON CONFLICT (nombre_producto) DO NOTHING;
+
+-- Ventas presenciales sin cuenta: datos propios de cada venta.
+-- Idempotente: iniciarBD() aplica también esta migración a bases existentes.
+ALTER TABLE pedido ALTER COLUMN cliente_id DROP NOT NULL;
+ALTER TABLE pedido ADD COLUMN IF NOT EXISTS dni_presencial VARCHAR(8)
+  CHECK (dni_presencial IS NULL OR dni_presencial ~ '^[0-9]{8}$');
+ALTER TABLE pedido ADD COLUMN IF NOT EXISTS ruc_presencial VARCHAR(11);
+ALTER TABLE pedido ADD COLUMN IF NOT EXISTS razon_social_presencial VARCHAR(100);

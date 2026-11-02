@@ -818,42 +818,19 @@ async function mostrarPanelBidones(clienteId) {
   }
 }
 
-document.getElementById("btnBuscarCliente")?.addEventListener("click", async () => {
-  const dato = document.getElementById("inputBuscarCliente").value.trim();
-  if (!dato) return;
-  try {
-    const resultados = await Api.get(`/api/clientes/buscar/${encodeURIComponent(dato)}`);
-    const cont = document.getElementById("resultadoBuscarCliente");
-    if (resultados.length === 0) {
-      cont.innerHTML = `<p class="text-mid">No se encontraron clientes.</p>`;
-      return;
-    }
-    cont.innerHTML = `<ul class="list-group">` +
-      resultados.map((c) => `
-        <li class="list-group-item d-flex justify-content-between align-items-center">
-          <span>${c.nombres ? `${c.nombres} ${c.apellidos}` : c.razon_social}
-            <span class="text-mid small ms-2">${c.dni || c.ruc || ""} · ${c.telefono}</span>
-          </span>
-          <button class="btn btn-sm btn-outline-primary" data-cliente-id="${c.cliente_id}"
-                  data-cliente-nombre="${c.nombres ? `${c.nombres} ${c.apellidos}` : c.razon_social}">
-            Seleccionar
-          </button>
-        </li>`
-      ).join("") + `</ul>`;
+function actualizarIdentificacionVenta() {
+  const conDni = document.getElementById("ventaConDni").checked;
+  const input = document.getElementById("ventaDni");
+  document.getElementById("bloqueDniVenta").classList.toggle("d-none", !conDni);
+  input.disabled = !conDni;
+  input.required = conDni;
+  if (!conDni) input.value = "";
+}
 
-    cont.querySelectorAll("button[data-cliente-id]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document.getElementById("ventaClienteId").value = btn.dataset.clienteId;
-        document.getElementById("ventaClienteNombre").textContent = btn.dataset.clienteNombre;
-        cont.innerHTML = "";
-        document.getElementById("inputBuscarCliente").value = "";
-      });
-    });
-  } catch (err) {
-    document.getElementById("resultadoBuscarCliente").innerHTML =
-      `<p class="text-danger">${err.message}</p>`;
-  }
+document.querySelectorAll('[name="identificacionVenta"]').forEach((radio) => {
+  radio.addEventListener("change", actualizarIdentificacionVenta);
 });
+actualizarIdentificacionVenta();
 
 function renderizarItemsVenta() {
   const cont = document.getElementById("itemsVenta");
@@ -926,8 +903,9 @@ document.getElementById("ventaComprobante").addEventListener("change", (e) => {
 
 document.getElementById("formVentaPresencial")?.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const clienteId = document.getElementById("ventaClienteId").value;
-  if (!clienteId) { alert("Busca y selecciona un cliente primero."); return; }
+  const conDni = document.getElementById("ventaConDni").checked;
+  const dni = conDni ? document.getElementById("ventaDni").value.trim() : null;
+  if (conDni && !/^\d{8}$/.test(dni)) { alert("Ingresa un DNI de 8 dígitos."); return; }
   if (!itemsVentaPresencial.length) { alert("Agrega al menos un producto."); return; }
 
   const comprobanteSelect = document.getElementById("ventaComprobante");
@@ -935,35 +913,41 @@ document.getElementById("formVentaPresencial")?.addEventListener("submit", async
   const ruc = document.getElementById("ventaRuc").value.trim();
   const razonSocial = document.getElementById("ventaRazonSocial").value.trim();
 
-  if (esFactura && (!ruc || !razonSocial)) {
-    alert("Para emitir factura, ingresa el RUC y la razón social.");
+  if (esFactura && (!/^\d{11}$/.test(ruc) || !razonSocial)) {
+    alert("Para emitir factura, ingresa un RUC de 11 dígitos y la razón social.");
     return;
   }
 
   const descuento = parseFloat(document.getElementById("ventaDescuento").value) || 0;
-  const montoPagado = parseFloat(document.getElementById("ventaMontoPagado").value) || 0;
+  const montoTexto = document.getElementById("ventaMontoPagado").value.trim();
+  const montoPagado = montoTexto === "" ? undefined : Number(montoTexto);
 
+  const boton = e.currentTarget.querySelector('button[type="submit"]');
+  if (boton.disabled) return;
+  boton.disabled = true;
   try {
     const data = await Api.post("/api/ventas-presenciales", {
-      clienteId: parseInt(clienteId),
+      dni,
       items: itemsVentaPresencial,
       metodoPagoId: parseInt(document.getElementById("ventaMetodoPago").value),
       comprobanteId: parseInt(comprobanteSelect.value),
       descuento,
-      montoPagado: montoPagado || undefined,
+      montoPagado,
       ...(esFactura && { ruc, razonSocial })
     });
 
     alert(`Venta registrada: ${data.orden}\nTotal: S/ ${data.totalAPagar.toFixed(2)}\nSaldo pendiente: S/ ${data.saldoPendiente.toFixed(2)}`);
     document.getElementById("formVentaPresencial").reset();
     document.getElementById("bloqueFacturaVenta").classList.add("d-none");
-    document.getElementById("ventaClienteId").value = "";
-    document.getElementById("ventaClienteNombre").textContent = "";
+    actualizarIdentificacionVenta();
+    document.getElementById("totalVentaPresencial").textContent = "S/ 0.00";
     itemsVentaPresencial = [];
     renderizarItemsVenta();
     cargarDashboard();
   } catch (err) {
     alert("Error: " + err.message);
+  } finally {
+    boton.disabled = false;
   }
 });
 

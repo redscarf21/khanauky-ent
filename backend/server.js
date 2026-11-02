@@ -606,8 +606,8 @@ app.get("/api/pedidos/:codigo/comprobante", requiereSesion, async (req, res) => 
              em.razon_social, em.ruc,
              ep.descripcion AS estado
       FROM pedido p
-      JOIN cliente c ON c.cliente_id = p.cliente_id
-      JOIN ubigeo ub ON ub.ubigeo_id = c.ubigeo_id
+      LEFT JOIN cliente c ON c.cliente_id = p.cliente_id
+      LEFT JOIN ubigeo ub ON ub.ubigeo_id = c.ubigeo_id
       LEFT JOIN persona pe ON pe.cliente_id = c.cliente_id
       LEFT JOIN empresa em ON em.cliente_id = c.cliente_id
       LEFT JOIN venta v ON v.pedido_id = p.pedido_id
@@ -619,7 +619,7 @@ app.get("/api/pedidos/:codigo/comprobante", requiereSesion, async (req, res) => 
     const pedido = rows[0];
     if (!pedido) return res.status(404).json({ error: "Pedido no encontrado." });
 
-    if (req.usuario.rol === "cliente" && pedido.cliente_id !== await getClienteId(req.usuario.id)) {
+    if (req.usuario.rol === "cliente" && (pedido.cliente_id == null || pedido.cliente_id !== await getClienteId(req.usuario.id))) {
       return res.status(403).json({ error: "No tienes permiso para ver este comprobante." });
     }
 
@@ -643,13 +643,15 @@ app.get("/api/pedidos/:codigo/comprobante", requiereSesion, async (req, res) => 
 
     const pedidoFormateado = {
       codigoOrden: pedido.codigo_orden,
-      cliente: pedido.tipo_cliente === "EMPRESA"
+      cliente: pedido.cliente_id == null
+        ? (pedido.razon_social_presencial || "Cliente presencial")
+        : pedido.tipo_cliente === "EMPRESA"
         ? pedido.razon_social
         : `${pedido.nombres} ${pedido.apellidos}`,
-      ruc: pedido.ruc || null,
-      razonSocial: pedido.razon_social || null,
-      dni: pedido.dni || null,
-      direccion: `${pedido.distrito}, ${pedido.provincia}, ${pedido.departamento}`,
+      ruc: pedido.ruc_presencial || pedido.ruc || null,
+      razonSocial: pedido.razon_social_presencial || pedido.razon_social || null,
+      dni: pedido.dni_presencial || pedido.dni || null,
+      direccion: [pedido.distrito, pedido.provincia, pedido.departamento].filter(Boolean).join(", "),
       telefono: pedido.telefono,
       tipoComprobante: pedido.tipo_comprobante,
       metodopago: "Varios",
@@ -685,27 +687,53 @@ app.get("/api/pedidos/:codigo/comprobante", requiereSesion, async (req, res) => 
 app.post("/api/ventas-presenciales", requiereRol("empleado"), async (req, res) => {
   try {
     const {
-      clienteId, items, metodoPagoId, comprobanteId,
+      clienteId = null, dni = null, items, metodoPagoId, comprobanteId,
       descuento = 0, montoPagado, eVentaId, ruc, razonSocial
     } = req.body;
 
-    if (!clienteId || !Array.isArray(items) || items.length === 0 || !metodoPagoId) {
+    if (!Array.isArray(items) || items.length === 0 || !metodoPagoId) {
       return res.status(400).json({ error: "Faltan datos para registrar la venta." });
     }
 
-    const { rows: cliRows } = await query(
-      `SELECT tipo_cliente FROM cliente WHERE cliente_id = $1`,
-      [clienteId]
+    const dniVenta = typeof dni === "string" ? dni.trim() : dni;
+    if (dniVenta !== null && (typeof dniVenta !== "string" || !/^\d{8}$/.test(dniVenta))) {
+      return res.status(400).json({ error: "El DNI debe tener exactamente 8 dígitos, o ser null para continuar sin DNI." });
+    }
+    if (items.some((i) => !i || !Number.isInteger(i.producto_id) || !Number.isInteger(i.cantidad) || i.cantidad <= 0)) {
+      return res.status(400).json({ error: "Los productos y cantidades deben ser válidos." });
+    }
+    if (!Number.isFinite(Number(descuento)) || Number(descuento) < 0 ||
+        (montoPagado != null && (!Number.isFinite(Number(montoPagado)) || Number(montoPagado) < 0))) {
+      return res.status(400).json({ error: "El descuento y el monto pagado deben ser números no negativos." });
+    }
+    const { rows: tipos } = await query(
+      `SELECT descripcion FROM tipo_comprobante WHERE comprobante_id = $1`, [comprobanteId || 1]
     );
-    if (!cliRows[0]) return res.status(404).json({ error: "Cliente no encontrado." });
-
-    const tipoCliente = cliRows[0].tipo_cliente;
+    if (!tipos[0]) return res.status(400).json({ error: "Comprobante no válido." });
+    const esFactura = tipos[0].descripcion.toLowerCase() === "factura";
+    if (esFactura && (typeof ruc !== "string" || !/^\d{11}$/.test(ruc) ||
+        typeof razonSocial !== "string" || !razonSocial.trim() || razonSocial.trim().length > 100)) {
+      return res.status(400).json({ error: "Para factura, ingresa un RUC de 11 dígitos y una razón social de hasta 100 caracteres." });
+    }
+    // Se mantiene compatibilidad con solicitudes que ya incluyen un cliente.
+    let tipoCliente = "PERSONA";
+    if (clienteId !== null) {
+      if (!Number.isInteger(clienteId) || clienteId <= 0) {
+        return res.status(400).json({ error: "Cliente no válido." });
+      }
+      const { rows: clientes } = await query(`SELECT tipo_cliente FROM cliente WHERE cliente_id = $1`, [clienteId]);
+      if (!clientes[0]) return res.status(404).json({ error: "Cliente no encontrado." });
+      tipoCliente = clientes[0].tipo_cliente;
+    }
 
     const { rows: productosDB } = await query(
       `SELECT * FROM producto WHERE producto_id = ANY($1)`,
       [items.map((i) => i.producto_id)]
     );
 
+    if (items.some((i) => !productosDB.some((p) => p.producto_id === i.producto_id))) {
+      return res.status(400).json({ error: "Uno de los productos no existe." });
+    }
     const itemsConPrecio = items.map((item) => {
       const prod = productosDB.find((p) => p.producto_id === item.producto_id);
       if (!prod) throw new Error(`Producto ${item.producto_id} no encontrado.`);
@@ -716,27 +744,18 @@ app.post("/api/ventas-presenciales", requiereRol("empleado"), async (req, res) =
     const codigoOrden = generarCodigoOrden();
 
     const totalConDescuento = Math.max(0, resumen.totalAPagar - Number(descuento));
-    const saldoPendiente = Math.max(0, totalConDescuento - Number(montoPagado || totalConDescuento));
+    const saldoPendiente = Math.max(0, totalConDescuento - Number(montoPagado ?? totalConDescuento));
 
     await conTransaccion(async (client) => {
-      if (ruc && razonSocial) {
-        await client.query(
-          `INSERT INTO empresa (cliente_id, razon_social, ruc)
-           VALUES ($1,$2,$3)
-           ON CONFLICT (cliente_id) DO UPDATE SET razon_social = EXCLUDED.razon_social, ruc = EXCLUDED.ruc`,
-          [clienteId, razonSocial, ruc]
-        );
-      }
-
       const { rows: estadoRows } = await client.query(
         `SELECT estado_id FROM estado_pedido WHERE descripcion = 'Entregado'`
       );
       const estadoId = estadoRows[0]?.estado_id;
 
       const { rows: pedidoRows } = await client.query(
-        `INSERT INTO pedido (codigo_orden, cliente_id, estado_id, e_venta_id)
-         VALUES ($1,$2,$3,$4) RETURNING pedido_id`,
-        [codigoOrden, clienteId, estadoId, eVentaId || null]
+        `INSERT INTO pedido (codigo_orden, cliente_id, estado_id, e_venta_id, dni_presencial, ruc_presencial, razon_social_presencial)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING pedido_id`,
+        [codigoOrden, clienteId, estadoId, eVentaId || null, dniVenta, esFactura ? ruc : null, esFactura ? razonSocial.trim() : null]
       );
       const pedidoId = pedidoRows[0].pedido_id;
 
@@ -762,7 +781,7 @@ app.post("/api/ventas-presenciales", requiereRol("empleado"), async (req, res) =
       await client.query(
         `INSERT INTO detalle_pago (venta_id, metodo_pago_id, monto_pagado)
          VALUES ($1,$2,$3)`,
-        [ventaId, metodoPagoId, montoPagado || totalConDescuento]
+        [ventaId, metodoPagoId, montoPagado ?? totalConDescuento]
       );
     });
 
@@ -813,7 +832,8 @@ app.get("/api/pedidos", requiereRol("empleado"), async (req, res) => {
              ep.descripcion AS estado, ep.estado_id,
              v.total_pago, v.saldo_pendiente, v.venta_id,
              tc.descripcion AS tipo_comprobante,
-             CASE WHEN c.tipo_cliente = 'PERSONA'
+             CASE WHEN p.cliente_id IS NULL THEN COALESCE(p.razon_social_presencial, 'Cliente presencial')
+               WHEN c.tipo_cliente = 'PERSONA'
                THEN pe.nombres || ' ' || pe.apellidos
                ELSE em.razon_social
              END AS cliente_nombre,
@@ -822,7 +842,7 @@ app.get("/api/pedidos", requiereRol("empleado"), async (req, res) => {
              ev.empleado_id AS e_venta_id,
              emp.nombres || ' ' || emp.apellidos AS vendedor
       FROM pedido p
-      JOIN cliente c ON c.cliente_id = p.cliente_id
+      LEFT JOIN cliente c ON c.cliente_id = p.cliente_id
       LEFT JOIN persona pe ON pe.cliente_id = c.cliente_id
       LEFT JOIN empresa em ON em.cliente_id = c.cliente_id
       JOIN estado_pedido ep ON ep.estado_id = p.estado_id
@@ -860,18 +880,20 @@ app.get("/api/pedidos/buscar/:dato", requiereRol("empleado"), async (req, res) =
       SELECT p.codigo_orden, p.fecha_pedido, p.estado_id,
              ep.descripcion AS estado,
              v.venta_id, v.total_pago, v.saldo_pendiente, v.descuento_aplicado,
-             CASE WHEN c.tipo_cliente = 'PERSONA'
+             CASE WHEN p.cliente_id IS NULL THEN COALESCE(p.razon_social_presencial, 'Cliente presencial')
+               WHEN c.tipo_cliente = 'PERSONA'
                THEN pe.nombres || ' ' || pe.apellidos
                ELSE em.razon_social
              END AS cliente_nombre,
              c.telefono
       FROM pedido p
-      JOIN cliente c ON c.cliente_id = p.cliente_id
+      LEFT JOIN cliente c ON c.cliente_id = p.cliente_id
       LEFT JOIN persona pe ON pe.cliente_id = c.cliente_id
       LEFT JOIN empresa em ON em.cliente_id = c.cliente_id
       JOIN estado_pedido ep ON ep.estado_id = p.estado_id
       LEFT JOIN venta v ON v.pedido_id = p.pedido_id
       WHERE c.telefono = $1 OR pe.dni = $1 OR em.ruc = $1
+         OR p.dni_presencial = $1 OR p.ruc_presencial = $1 OR p.codigo_orden = $1
       ORDER BY p.fecha_pedido DESC
     `, [dato]);
     res.json(rows);
