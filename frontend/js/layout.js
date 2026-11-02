@@ -97,8 +97,12 @@ function renderizarAuthSlot() {
 function actualizarContadorGlobal() {
   const span = document.getElementById("cartCountGlobal");
   if (!span) return;
-  const carrito = JSON.parse(localStorage.getItem("carritoAgua")) || [];
-  span.textContent = carrito.reduce((total, p) => total + p.cantidad, 0);
+  let carrito = [];
+  try {
+    const guardado = JSON.parse(localStorage.getItem("carritoAgua"));
+    if (Array.isArray(guardado)) carrito = guardado;
+  } catch { localStorage.removeItem("carritoAgua"); }
+  span.textContent = carrito.reduce((total, p) => total + (Number.isInteger(p?.cantidad) && p.cantidad > 0 ? p.cantidad : 0), 0);
 }
 
 function inicializarLayout(paginaActual = "") {

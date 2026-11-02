@@ -108,12 +108,12 @@
       <button class="menu-btn activa" data-target="sec-inicio"><i class="bi bi-house-door"></i> Inicio</button>
       <button class="menu-btn" data-target="sec-registro"><i class="bi bi-bag-plus"></i> Registrar venta</button>
       <button class="menu-btn" data-target="sec-reporte"><i class="bi bi-bar-chart"></i> Reporte de ventas</button>
-      <button class="menu-btn" data-target="sec-buscar"><i class="bi bi-search"></i> Buscar por DNI</button>
+      <button class="menu-btn" data-target="sec-buscar"><i class="bi bi-search"></i> Buscar / cobrar pedidos</button>
       <button class="menu-btn" data-target="sec-factura"><i class="bi bi-receipt"></i> Generar comprobante</button>
       <button class="menu-btn" data-target="sec-lotes"><i class="bi bi-box-seam"></i> Lotes de producción</button>
       <button class="menu-btn" data-target="sec-transportes"><i class="bi bi-truck"></i> Transportes</button>
       <button class="menu-btn" data-target="sec-entregas"><i class="bi bi-signpost-split"></i> Entregas</button>
-      <button class="menu-btn" data-target="sec-sucursales"><i class="bi bi-geo-alt"></i> Zonas / Ingresos</button>
+      <button class="menu-btn" data-target="sec-sucursales"><i class="bi bi-geo-alt"></i> Zonas / Ventas</button>
       <button class="menu-btn" data-target="sec-clientes"><i class="bi bi-people"></i> Clientes</button>
       <button class="menu-btn" data-target="sec-empleados"><i class="bi bi-person-badge"></i> Empleados</button>
       <a href="index.html" class="menu-btn d-flex" style="text-decoration:none;"><i class="bi bi-box-arrow-left"></i>
@@ -266,7 +266,7 @@
             <h4 class="mb-0">Reporte de ventas</h4>
           </div>
           <div class="tabs-reporte">
-            <button class="tab-reporte-btn activa" data-reporte="diario">Reporte diario</button>
+            <button class="tab-reporte-btn activa" data-reporte="diario">Historial de ventas</button>
             <button class="tab-reporte-btn" data-reporte="mensual">Reporte mensual</button>
           </div>
           <div class="leyenda-estados">
@@ -288,7 +288,7 @@
               </div>
               <div class="col-sm-4">
                 <div class="kpi-card">
-                  <div class="small text-mid">Total histórico</div>
+                  <div class="small text-mid">Total de los últimos 12 meses con ventas</div>
                   <div class="valor" id="kpiTotalHistorico">S/ 0</div>
                 </div>
               </div>
@@ -305,9 +305,10 @@
 
         <!-- BUSCAR -->
         <section id="sec-buscar" class="seccion-admin">
-          <h4 class="mb-4">Buscar pedidos por DNI, RUC o teléfono</h4>
+          <h4 class="mb-4">Buscar pedidos por orden, DNI, RUC o teléfono</h4>
+          <p class="small text-mid">Registra aquí los cobros de pedidos web. Al completar el saldo, el pago se confirma automáticamente.</p>
           <div class="d-flex gap-2 mb-3" style="max-width:400px;">
-            <input type="text" class="form-control" id="inputDni" placeholder="DNI, RUC o teléfono">
+            <input type="text" class="form-control" id="inputDni" placeholder="Código de orden, DNI, RUC o teléfono">
             <button class="btn-khanauky-primario" id="btnBuscarDni">Buscar</button>
           </div>
           <div id="resultadoBusqueda"></div>
@@ -402,7 +403,7 @@
           <h4 class="mb-4">Zonas e ingresos</h4>
           <h5 class="mb-3">Distritos registrados</h5>
           <div id="listaSucursalesAdmin" class="mb-4"></div>
-          <h5 class="mb-3">Ingresos por zona</h5>
+          <h5 class="mb-3">Ventas por zona</h5>
           <div id="resumenIngresosSucursales">Cargando datos...</div>
         </section>
 
@@ -542,7 +543,12 @@
       const mapa = { VENTA: "bloqueVenta", PRODUCCION: "bloqueProduccion", ENTREGA: "bloqueEntrega" };
       const bloque = mapa[e.target.value];
       if (bloque) document.getElementById(bloque).style.display = "block";
+      for (const id of ["empCarnet", "empVencCarnet", "empLicencia", "empVencLicencia"]) {
+        const input = document.getElementById(id);
+        input.required = input.closest(".bloque-especializacion").id === bloque;
+      }
     });
+    document.getElementById("empTipo").dispatchEvent(new Event("change"));
   </script>
 </body>
 

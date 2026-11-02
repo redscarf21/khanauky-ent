@@ -1,5 +1,10 @@
 let productosDisponibles = [];
-let carrito = JSON.parse(localStorage.getItem("carritoAgua")) || [];
+let carrito = [];
+try {
+  const guardado = JSON.parse(localStorage.getItem("carritoAgua"));
+  if (Array.isArray(guardado)) carrito = guardado;
+} catch { localStorage.removeItem("carritoAgua"); }
+let revisionCarrito = 0;
 
 async function cargarProductos() {
   try {
@@ -29,8 +34,8 @@ function renderizarProductos() {
               ${sinStock ? "Sin stock" : `${prod.stock_total} disp.`}
             </span>
           </div>
-          <h5 class="mb-1">${prod.nombre_producto}</h5>
-          <p class="text-mid small mb-2">${prod.descripcion || ""}</p>
+          <h5 class="mb-1">${escaparHtml(prod.nombre_producto)}</h5>
+          <p class="text-mid small mb-2">${escaparHtml(prod.descripcion || "")}</p>
           <div class="d-flex justify-content-between align-items-center mb-1">
             <span class="fw-bold fs-5 text-azul-marca">S/ ${Number(prod.precio).toFixed(2)}</span>
             <span class="small text-mid">${prod.capacidad}</span>
@@ -56,7 +61,8 @@ function renderizarProductos() {
 
 async function agregarAlCarrito(id) {
   try {
-    await Api.get("/api/sesion");
+    const { usuario } = await Api.get("/api/sesion");
+    if (usuario.rol !== "cliente") { alert("Registra las ventas presenciales desde el panel de empleado."); return; }
   } catch {
     alert("Para realizar pedidos, primero inicia sesión.");
     window.location.href = "login.html";
@@ -66,6 +72,10 @@ async function agregarAlCarrito(id) {
   const producto = productosDisponibles.find((p) => p.producto_id === id);
   const existente = carrito.find((item) => item.producto_id === id);
 
+  if (!producto || (existente?.cantidad || 0) >= Number(producto.stock_total)) {
+    alert("No hay más unidades disponibles de este producto.");
+    return;
+  }
   if (existente) {
     existente.cantidad += 1;
   } else {
@@ -77,12 +87,15 @@ async function agregarAlCarrito(id) {
 }
 
 async function actualizarCarrito() {
+  const revision = ++revisionCarrito;
   localStorage.setItem("carritoAgua", JSON.stringify(carrito));
 
   const lista = document.getElementById("listaCarrito");
   const totalSpan = document.getElementById("totalCarrito");
   const contador = document.getElementById("contadorCarrito");
 
+  const badge = totalSpan.nextElementSibling;
+  if (badge?.classList.contains("badge-delivery") || badge?.classList.contains("badge-recojo")) badge.remove();
   if (carrito.length === 0) {
     lista.innerHTML = `<p class="text-center text-mid mt-4">El carrito está vacío.</p>`;
     totalSpan.textContent = "S/ 0.00";
@@ -93,13 +106,14 @@ async function actualizarCarrito() {
 
   try {
     const resumen = await Api.post("/api/cotizar", { items: carrito });
+    if (revision !== revisionCarrito) return;
 
     lista.innerHTML = "";
     resumen.detalle.forEach((item) => {
       lista.innerHTML += `
         <div class="item-carrito">
           <div>
-            <h6 class="mb-0">${item.nombre}</h6>
+            <h6 class="mb-0">${escaparHtml(item.nombre)}</h6>
             <span class="small text-mid">S/ ${Number(item.precioUnitario).toFixed(2)} c/u · Subtotal: S/ ${Number(item.subTotal).toFixed(2)}</span>
           </div>
           <div class="controles-cantidad">
@@ -141,6 +155,10 @@ async function actualizarCarrito() {
 function cambiarCantidad(id, cambio) {
   const item = carrito.find((i) => i.producto_id === id);
   if (!item) return;
+  const producto = productosDisponibles.find(p => p.producto_id === id);
+  if (cambio > 0 && (!producto || item.cantidad + cambio > Number(producto.stock_total))) {
+    alert("No hay más unidades disponibles de este producto."); return;
+  }
   item.cantidad += cambio;
   if (item.cantidad <= 0) carrito = carrito.filter((i) => i.producto_id !== id);
   actualizarCarrito();

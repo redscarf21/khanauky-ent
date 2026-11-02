@@ -9,12 +9,18 @@ const bloqueDevolucionBidon = document.getElementById("bloqueDevolucionBidon");
 
 const PRECIO_COMPRA_BIDON = 5;
 
-let pedido = JSON.parse(localStorage.getItem("carritoAgua")) || [];
+let pedido = [];
+try {
+  const guardado = JSON.parse(localStorage.getItem("carritoAgua"));
+  if (Array.isArray(guardado)) pedido = guardado;
+} catch { localStorage.removeItem("carritoAgua"); }
 let resumenActual = null;
 let metodosPago = [];
 let tiposComprobante = [];
 let ubigeoIdCliente = null;
 let cantidadBidones20L = 0;
+let enviando = false;
+btnConfirmar.disabled = true;
 
 checkFactura.addEventListener("change", () => {
   bloqueFactura.classList.toggle("d-none", !checkFactura.checked);
@@ -49,7 +55,7 @@ async function cargarResumen() {
     resumenActual.detalle.forEach((item) => {
       divResumen.innerHTML += `
         <div class="resumen-item">
-          <span>${item.cantidad}x <strong>${item.nombre}</strong></span>
+          <span>${item.cantidad}x <strong>${escaparHtml(item.nombre)}</strong></span>
           <span>S/ ${Number(item.subTotal).toFixed(2)}</span>
         </div>`;
     });
@@ -61,13 +67,16 @@ async function cargarResumen() {
 
     actualizarTotalMostrado();
 
+    document.getElementById("direccion").required = resumenActual.modalidadSugerida === "delivery";
     if (resumenActual.modalidadSugerida === "delivery") {
       avisoEntrega.innerHTML = `<div class="aviso-entrega aviso-delivery"><i class="bi bi-truck"></i><span>Tu pedido califica para <strong>delivery</strong>: te lo llevamos hasta tu dirección.</span></div>`;
     } else {
       avisoEntrega.innerHTML = `<div class="aviso-entrega aviso-recojo"><i class="bi bi-shop"></i><span>Por el monto de tu pedido, la entrega es <strong>recojo en tienda</strong>. Desde S/ ${resumenActual.montoMinimoDelivery.toFixed(2)} ya calificas para delivery.</span></div>`;
     }
   } catch (err) {
-    divResumen.innerHTML = `<p class="text-danger small">${err.message}</p>`;
+    resumenActual = null;
+    divResumen.textContent = err.message;
+    btnConfirmar.disabled = true;
   }
 
   try {
@@ -101,7 +110,7 @@ async function cargarOpciones() {
 
 document.getElementById("formularioPedido").addEventListener("submit", async (e) => {
   e.preventDefault();
-  if (!pedido.length || !resumenActual) return;
+  if (enviando || !pedido.length || !resumenActual) return;
 
   const comprobanteId = checkFactura.checked
     ? tiposComprobante.find((t) => t.descripcion === "Factura")?.comprobante_id
@@ -110,8 +119,8 @@ document.getElementById("formularioPedido").addEventListener("submit", async (e)
   if (checkFactura.checked) {
     const ruc = document.getElementById("ruc").value.trim();
     const razonSocial = document.getElementById("razonSocial").value.trim();
-    if (!ruc || !razonSocial) {
-      alert("Ingresa el RUC y la razón social para emitir factura.");
+    if (!/^\d{11}$/.test(ruc) || !razonSocial || razonSocial.length > 100) {
+      alert("Ingresa un RUC de 11 dígitos y una razón social de hasta 100 caracteres.");
       return;
     }
   }
@@ -120,7 +129,9 @@ document.getElementById("formularioPedido").addEventListener("submit", async (e)
     items: pedido,
     metodoPagoId: parseInt(document.getElementById("metodoPagoId").value),
     comprobanteId: comprobanteId || 1,
-    direccionEntrega: document.getElementById("direccion").value,
+    nombreContacto: document.getElementById("nombre").value.trim(),
+    telefonoContacto: document.getElementById("telefono").value.trim(),
+    direccionEntrega: document.getElementById("direccion").value.trim(),
     ubigeoId: ubigeoIdCliente,
     ...(checkFactura.checked && {
       ruc: document.getElementById("ruc").value.trim(),
@@ -134,6 +145,7 @@ document.getElementById("formularioPedido").addEventListener("submit", async (e)
     })
   };
 
+  enviando = true;
   btnConfirmar.disabled = true;
   btnConfirmar.textContent = "Enviando...";
 
@@ -144,10 +156,13 @@ document.getElementById("formularioPedido").addEventListener("submit", async (e)
     window.location.replace("panel_cliente.html");
   } catch (err) {
     alert(err.message);
+    enviando = false;
     btnConfirmar.disabled = false;
     btnConfirmar.textContent = "Confirmar y enviar pedido";
   }
 });
 
-cargarResumen();
-cargarOpciones();
+Promise.all([cargarResumen(), cargarOpciones()]).then(() => {
+  btnConfirmar.disabled = !(pedido.length && resumenActual && metodosPago.length && tiposComprobante.length && ubigeoIdCliente);
+  if (pedido.length && !ubigeoIdCliente) avisoEntrega.textContent = "No se pudo cargar tu perfil. Recarga la página antes de confirmar.";
+});

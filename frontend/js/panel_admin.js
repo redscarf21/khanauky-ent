@@ -1,5 +1,4 @@
 let productosCatalogo = [];
-let sucursalesCache = [];
 let itemsVentaPresencial = [];
 let usuarioActual = null;
 let estadosPedido = [];
@@ -95,15 +94,13 @@ async function cargarDashboard() {
 
     document.getElementById("kpiPedidos").textContent = pedidos.length;
     document.getElementById("kpiVentas").textContent =
-      "S/ " + pedidos.reduce((t, p) => t + Number(p.total_pago || 0), 0).toFixed(2);
+      "S/ " + pedidos.filter(p => p.estado !== "Cancelado").reduce((t, p) => t + Number(p.total_pago || 0), 0).toFixed(2);
     document.getElementById("kpiPendientes").textContent =
       pedidos.filter((p) => p.estado === "Venta Registrada").length;
 
     const sinStock = stock.filter((s) => Number(s.stock_disponible) === 0).length;
     document.getElementById("kpiSinStock").textContent = sinStock;
-    if (sinStock > 0) {
-      document.getElementById("kpiSinStock").closest(".kpi-card").classList.add("border-danger");
-    }
+    document.getElementById("kpiSinStock").closest(".kpi-card").classList.toggle("border-danger", sinStock > 0);
 
     const stockBajo = stock.filter((s) =>
       Number(s.stock_disponible) > 0 && Number(s.stock_disponible) < UMBRAL_STOCK_BAJO
@@ -113,13 +110,13 @@ async function cargarDashboard() {
       ? `<p class="text-success small mb-0"><i class="bi bi-check-circle me-1"></i>Todo el stock está en niveles saludables.</p>`
       : stockBajo.map((s) => `
         <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-          <span class="small">${s.nombre_producto}</span>
+          <span class="small">${escaparHtml(s.nombre_producto)}</span>
           <span class="badge bg-warning text-dark">${s.stock_disponible} unid.</span>
         </div>`).join("");
 
     const hoy = new Date();
     const lotesPorVencer = lotes.filter((l) => {
-      if (l.estado !== "Disponible") return false;
+      if (l.estado !== "Disponible" || Number(l.unidades_disponibles) <= 0) return false;
       const dias = Math.ceil((new Date(l.fecha_vencimiento) - hoy) / (1000 * 60 * 60 * 24));
       return dias <= DIAS_ALERTA_VENCIMIENTO;
     });
@@ -131,7 +128,7 @@ async function cargarDashboard() {
           const vencido = dias < 0;
           return `
           <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-            <span class="small">${l.nombre_producto} <span class="text-mid">(${l.unidades_disponibles} unid.)</span></span>
+            <span class="small">${escaparHtml(l.nombre_producto)} <span class="text-mid">(${l.unidades_disponibles} unid.)</span></span>
             <span class="badge ${vencido ? "bg-danger" : "bg-warning text-dark"}">
               ${vencido ? "Vencido" : `Vence en ${dias} día(s)`}
             </span>
@@ -164,9 +161,6 @@ async function cargarPedidos() {
       return;
     }
 
-    const selectEstados = estadosPedido.map((e) =>
-      `<option value="${e.estado_id}">${e.descripcion}</option>`).join("");
-
     let html = `<div class="table-responsive"><table class="tabla-khanauky"><thead><tr>
       <th>Orden</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Saldo</th><th>Entrega</th><th>Estado</th></tr></thead><tbody>`;
 
@@ -178,9 +172,9 @@ async function cargarPedidos() {
       html += `<tr>
         <td><span class="punto-estado" style="background:${color};"></span><strong>${p.codigo_orden}</strong></td>
         <td class="small">${fecha}</td>
-        <td>${p.cliente_nombre || "-"}</td>
+        <td>${escaparHtml(p.cliente_nombre || "-")}</td>
         <td>S/ ${Number(p.total_pago || 0).toFixed(2)}</td>
-        <td>${saldo > 0 ? `<span class="text-danger">S/ ${saldo.toFixed(2)}</span>` : `<span class="text-success">Pagado</span>`}</td>
+        <td>${p.estado === "Cancelado" ? "—" : saldo > 0 ? `<span class="text-danger">S/ ${saldo.toFixed(2)}</span>` : `<span class="text-success">Pagado</span>`}</td>
         <td>${p.direccion_entrega
           ? `<span class="badge-modalidad badge-delivery">Delivery</span>`
           : `<span class="badge-modalidad badge-recojo">Recojo</span>`}</td>
@@ -210,6 +204,8 @@ async function actualizarEstado(orden, estadoId) {
     cargarDashboard();
   } catch (err) {
     alert("Error al actualizar el estado: " + err.message);
+  } finally {
+    cargarPedidos();
   }
 }
 
@@ -263,9 +259,6 @@ async function buscarYRenderizarPedidos(dato) {
 
     const opcionesMetodoPago = metodosPago.map((m) =>
       `<option value="${m.metodo_pago_id}">${m.descripcion}</option>`).join("");
-    const opcionesEstado = estadosPedido.map((e) =>
-      `<option value="${e.estado_id}">${e.descripcion}</option>`).join("");
-
     cont.innerHTML = resultados.map((p) => {
       const saldo = Number(p.saldo_pendiente || 0);
       const fecha = p.fecha_pedido ? new Date(p.fecha_pedido).toLocaleDateString("es-PE") : "-";
@@ -273,9 +266,9 @@ async function buscarYRenderizarPedidos(dato) {
       <div class="card-khanauky p-3 mb-3">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
           <div>
-            <strong>${p.codigo_orden}</strong> — ${p.cliente_nombre}
+            <strong>${p.codigo_orden}</strong> — ${escaparHtml(p.cliente_nombre)}
             <div class="small text-mid">${fecha} · Total: S/ ${Number(p.total_pago || 0).toFixed(2)}
-              ${saldo > 0
+              ${p.estado === "Cancelado" ? "· Cancelado" : saldo > 0
                 ? `· <span class="text-danger fw-semibold">Saldo pendiente: S/ ${saldo.toFixed(2)}</span>`
                 : `· <span class="text-success fw-semibold">Pagado completo</span>`}
             </div>
@@ -286,7 +279,7 @@ async function buscarYRenderizarPedidos(dato) {
             ).join("")}
           </select>
         </div>
-        ${p.venta_id && saldo > 0 ? `
+        ${p.estado !== "Cancelado" && p.venta_id && saldo > 0 ? `
           <div class="d-flex flex-wrap gap-2 align-items-end border-top pt-2 mt-2">
             <div>
               <label class="form-label small mb-1">Monto del abono</label>
@@ -308,6 +301,7 @@ async function buscarYRenderizarPedidos(dato) {
           await buscarYRenderizarPedidos(dato);
         } catch (err) {
           alert("Error al actualizar el estado: " + err.message);
+          await buscarYRenderizarPedidos(dato);
         }
       });
     });
@@ -319,11 +313,13 @@ async function buscarYRenderizarPedidos(dato) {
         const selectMetodo = cont.querySelector(`select[data-metodo-abono="${ventaId}"]`);
         const monto = parseFloat(inputMonto.value);
 
-        if (!monto || monto <= 0) {
-          alert("Ingresa un monto válido para el abono.");
+        if (!Number.isFinite(monto) || monto <= 0 || monto > Number(inputMonto.max)) {
+          alert("Ingresa un abono mayor que cero y no mayor al saldo.");
           return;
         }
 
+        if (btn.disabled) return;
+        btn.disabled = true;
         try {
           await Api.post(`/api/ventas/${ventaId}/pago-parcial`, {
             metodoPagoId: parseInt(selectMetodo.value),
@@ -332,6 +328,8 @@ async function buscarYRenderizarPedidos(dato) {
           await buscarYRenderizarPedidos(dato);
         } catch (err) {
           alert("Error al registrar el abono: " + err.message);
+        } finally {
+          btn.disabled = false;
         }
       });
     });
@@ -346,7 +344,7 @@ document.getElementById("btnListarFacturas").addEventListener("click", async () 
     const pedidos = await Api.get("/api/pedidos");
     cont.innerHTML = pedidos.map((p) => `
       <div class="d-flex justify-content-between align-items-center border-bottom py-2">
-        <span>${p.codigo_orden} — ${p.cliente_nombre} — S/ ${Number(p.total_pago || 0).toFixed(2)}</span>
+        <span>${p.codigo_orden} — ${escaparHtml(p.cliente_nombre)} — S/ ${Number(p.total_pago || 0).toFixed(2)}</span>
         ${p.estado === "Cancelado"
           ? `<span class="small text-mid fst-italic">Sin comprobante (cancelado)</span>`
           : `<a class="btn-khanauky-outline btn-sm" target="_blank"
@@ -362,12 +360,6 @@ document.getElementById("btnListarFacturas").addEventListener("click", async () 
 async function cargarProductosCatalogo() {
   try {
     productosCatalogo = await Api.get("/api/productos");
-    const select = document.getElementById("ventaSucursal");
-    if (select) {
-      const ubigeos = await Api.get("/api/ubigeo");
-      select.innerHTML = ubigeos.map((u) =>
-        `<option value="${u.ubigeo_id}">${u.distrito} — ${u.provincia}</option>`).join("");
-    }
   } catch {}
 }
 
@@ -377,7 +369,7 @@ async function cargarListaSucursales() {
     const ubigeos = await Api.get("/api/ubigeo");
     cont.innerHTML = `<ul class="list-group">` +
       ubigeos.map((u) =>
-        `<li class="list-group-item">${u.distrito} <span class="text-mid small">— ${u.provincia}, ${u.departamento}</span></li>`
+        `<li class="list-group-item">${escaparHtml(u.distrito)} <span class="text-mid small">— ${escaparHtml(u.provincia)}, ${escaparHtml(u.departamento)}</span></li>`
       ).join("") + `</ul>`;
   } catch (err) {
     cont.innerHTML = `<p class="text-danger">${err.message}</p>`;
@@ -389,9 +381,9 @@ async function cargarResumenIngresos() {
   try {
     const resumen = await Api.get("/api/sucursales/resumen-ingresos");
     cont.innerHTML = `<div class="table-responsive"><table class="tabla-khanauky"><thead><tr>
-      <th>Zona</th><th>Pedidos</th><th>Ingresos</th></tr></thead><tbody>` +
+      <th>Zona</th><th>Pedidos</th><th>Ventas registradas</th></tr></thead><tbody>` +
       resumen.map((r) =>
-        `<tr><td>${r.distrito}, ${r.provincia}</td><td>${r.total_pedidos}</td><td>S/ ${Number(r.total_ingresos).toFixed(2)}</td></tr>`
+        `<tr><td>${escaparHtml(r.distrito)}, ${escaparHtml(r.provincia)}</td><td>${r.total_pedidos}</td><td>S/ ${Number(r.total_ingresos).toFixed(2)}</td></tr>`
       ).join("") + `</tbody></table></div>`;
   } catch (err) {
     cont.innerHTML = `<p class="text-danger">${err.message}</p>`;
@@ -412,18 +404,18 @@ async function cargarTablaEmpleados() {
 
     empleados.forEach((emp) => {
       let acciones = "";
-      if (usuarioActual?.esAdminPrincipal) {
-        acciones += `<button class="btn-khanauky-outline btn-sm me-2" data-accion="reset" data-id="${emp.empleado_id}" data-nombre="${emp.nombres}">Asignar clave</button>`;
+      if (usuarioActual?.esAdminPrincipal && emp.usuario_id) {
+        acciones += `<button class="btn-khanauky-outline btn-sm me-2" data-accion="reset" data-id="${emp.empleado_id}" data-nombre="${escaparHtml(emp.nombres)}">Asignar clave</button>`;
         if (!emp.es_admin_principal) {
-          acciones += `<button class="btn btn-outline-danger btn-sm" data-accion="eliminar" data-id="${emp.empleado_id}" data-nombre="${emp.nombres}">Eliminar</button>`;
+          acciones += `<button class="btn btn-outline-danger btn-sm" data-accion="eliminar" data-id="${emp.empleado_id}" data-nombre="${escaparHtml(emp.nombres)}">Eliminar</button>`;
         }
       }
       html += `<tr>
-        <td>${emp.nombres} ${emp.apellidos}</td>
-        <td>${emp.dni}</td>
-        <td>${emp.tipo_empleado}</td>
-        <td>${emp.tipo_contrato}</td>
-        <td>${emp.estado}</td>
+        <td>${escaparHtml(emp.nombres)} ${escaparHtml(emp.apellidos)}</td>
+        <td>${escaparHtml(emp.dni)}</td>
+        <td>${escaparHtml(emp.tipo_empleado)}</td>
+        <td>${escaparHtml(emp.tipo_contrato)}</td>
+        <td>${escaparHtml(emp.estado)}</td>
         <td>${acciones}</td>
       </tr>`;
     });
@@ -452,7 +444,7 @@ async function asignarNuevaPassword(id, nombre) {
 }
 
 async function eliminarEmpleado(id, nombre) {
-  if (!confirm(`¿Eliminar la cuenta de ${nombre}? Esta acción no se puede deshacer.`)) return;
+  if (!confirm(`¿Eliminar el acceso de ${nombre}? Se conservará su historial de trabajo y ventas.`)) return;
   try {
     await Api.delete(`/api/empleados/${id}`);
     cargarTablaEmpleados();
@@ -499,6 +491,7 @@ document.getElementById("formEmpleado").addEventListener("submit", async (e) => 
     mensaje.className = "small mt-2 mb-0 text-success fw-semibold";
     mensaje.textContent = data.mensaje;
     document.getElementById("formEmpleado").reset();
+    document.getElementById("empTipo").dispatchEvent(new Event("change"));
     cargarTablaEmpleados();
   } catch (err) {
     mensaje.className = "small mt-2 mb-0 text-danger fw-semibold";
@@ -523,7 +516,7 @@ async function cargarLotes() {
         const diasRestantes = Math.ceil((vence - hoy) / (1000 * 60 * 60 * 24));
         const alertaVenc = diasRestantes <= 7 ? "text-danger fw-bold" : "";
         return `<tr>
-          <td>${l.nombre_producto}</td>
+          <td>${escaparHtml(l.nombre_producto)}</td>
           <td>${new Date(l.fecha_produccion).toLocaleDateString("es-PE")}</td>
           <td>${l.unidades_producidas}</td>
           <td><input type="number" min="0" class="form-control form-control-sm" style="width:90px;" data-disp="${l.lote_id}" value="${l.unidades_disponibles}"></td>
@@ -586,7 +579,7 @@ async function cargarTransportes() {
     cont.innerHTML = `<div class="table-responsive"><table class="tabla-khanauky"><thead><tr>
       <th>Modelo</th><th>Tipo</th><th>Estado</th><th></th></tr></thead><tbody>` +
       transportes.map((t) => `<tr>
-        <td>${t.modelo_transporte}</td>
+        <td>${escaparHtml(t.modelo_transporte)}</td>
         <td>${t.tipo}</td>
         <td>
           <select class="form-select form-select-sm" style="width:auto;" data-id="${t.transporte_id}">
@@ -649,7 +642,7 @@ async function cargarEntregas() {
       Api.get("/api/transportes")
     ]);
 
-    const filtradas = soloPendientes ? entregas.filter((d) => !d.hora_entrega) : entregas;
+    const filtradas = soloPendientes ? entregas.filter((d) => !d.hora_entrega && d.estado_pedido !== "Entregado") : entregas;
 
     if (filtradas.length === 0) {
       cont.innerHTML = `<p class="text-mid">No hay entregas ${soloPendientes ? "pendientes" : "registradas"}.</p>`;
@@ -658,7 +651,7 @@ async function cargarEntregas() {
 
     const porDistrito = {};
     filtradas.forEach((d) => {
-      const clave = `${d.distrito}, ${d.provincia}`;
+      const clave = `${escaparHtml(d.distrito)}, ${escaparHtml(d.provincia)}`;
       (porDistrito[clave] = porDistrito[clave] || []).push(d);
     });
 
@@ -671,12 +664,13 @@ async function cargarEntregas() {
         ${lista.map((d) => `
           <tr>
             <td>${d.codigo_orden || "-"}</td>
-            <td>${d.cliente_nombre || "-"}<div class="small text-mid">${d.telefono || ""}</div></td>
-            <td class="small">${d.direccion_entrega}</td>
+            <td>${escaparHtml(d.cliente_nombre || "-")}<div class="small text-mid">${escaparHtml(d.telefono || "")}</div></td>
+            <td class="small">${escaparHtml(d.direccion_entrega)}</td>
             <td>
               <select class="form-select form-select-sm" style="width:auto;" data-transporte="${d.delivery_id}">
-                ${transportes.map((t) =>
-                  `<option value="${t.transporte_id}" ${t.transporte_id === d.transporte_id ? "selected" : ""}>${t.modelo_transporte}</option>`
+                <option value="">Sin asignar</option>
+                ${transportes.filter(t => t.estado === "Operativo" || t.transporte_id === d.transporte_id).map((t) =>
+                  `<option value="${t.transporte_id}" ${t.transporte_id === d.transporte_id ? "selected" : ""}>${escaparHtml(t.modelo_transporte)}</option>`
                 ).join("")}
               </select>
             </td>
@@ -695,13 +689,11 @@ async function cargarEntregas() {
         const entregaInput = cont.querySelector(`input[data-entrega="${id}"]`);
 
         try {
-          await Promise.all([
-            Api.patch(`/api/deliveries/${id}/transporte`, { transporteId: parseInt(transporteSel.value) }),
-            Api.patch(`/api/deliveries/${id}`, {
-              horaSalida: salidaInput.value || null,
-              horaEntrega: entregaInput.value || null
-            })
-          ]);
+          await Api.patch(`/api/deliveries/${id}`, {
+            transporteId: transporteSel.value ? Number(transporteSel.value) : null,
+            horaSalida: salidaInput.value || null,
+            horaEntrega: entregaInput.value || null
+          });
           cargarEntregas();
         } catch (err) {
           alert("Error al guardar la entrega: " + err.message);
@@ -723,11 +715,11 @@ async function cargarClientes() {
     cont.innerHTML = `<div class="table-responsive"><table class="tabla-khanauky"><thead><tr>
       <th>Cliente</th><th>Tipo</th><th>DNI / RUC</th><th>Teléfono</th><th>Distrito</th><th>Bidones pendientes</th><th></th></tr></thead><tbody>` +
       clientes.map((c) => `<tr>
-        <td>${c.nombres ? `${c.nombres} ${c.apellidos}` : c.razon_social}</td>
+        <td>${c.nombres ? `${escaparHtml(c.nombres)} ${escaparHtml(c.apellidos)}` : c.razon_social}</td>
         <td>${c.tipo_cliente}</td>
         <td>${c.dni || c.ruc || "-"}</td>
-        <td>${c.telefono}</td>
-        <td>${c.distrito}, ${c.provincia}</td>
+        <td>${escaparHtml(c.telefono)}</td>
+        <td>${escaparHtml(c.distrito)}, ${escaparHtml(c.provincia)}</td>
         <td>${Number(c.bidones_pendientes) > 0
           ? `<span class="text-danger fw-bold">${c.bidones_pendientes}</span>`
           : `<span class="text-success">0</span>`}</td>
@@ -749,7 +741,7 @@ async function mostrarPanelBidones(clienteId) {
   const nombreCliente = cliente ? (cliente.nombres ? `${cliente.nombres} ${cliente.apellidos}` : cliente.razon_social) : "";
 
   panel.classList.remove("d-none");
-  panel.innerHTML = `<p class="text-mid">Cargando historial de ${nombreCliente}...</p>`;
+  panel.innerHTML = `<p class="text-mid">Cargando historial de ${escaparHtml(nombreCliente)}...</p>`;
 
   try {
     const movimientos = await Api.get(`/api/bidones/${clienteId}`);
@@ -757,7 +749,7 @@ async function mostrarPanelBidones(clienteId) {
     const filasHistorial = movimientos.length === 0
       ? `<p class="text-mid small">Sin movimientos registrados todavía.</p>`
       : `<div class="table-responsive"><table class="tabla-khanauky mb-0"><thead><tr>
-          <th>Fecha</th><th>Entregados</th><th>Recibidos</th><th>Prestados (neto)</th></tr></thead><tbody>` +
+          <th>Fecha</th><th>Entregados</th><th>Recibidos</th><th>Entregados en préstamo</th></tr></thead><tbody>` +
         movimientos.map((m) => `<tr>
           <td class="small">${new Date(m.fecha_movimiento).toLocaleDateString("es-PE")}</td>
           <td>${m.cantidad_entregados}</td>
@@ -767,7 +759,7 @@ async function mostrarPanelBidones(clienteId) {
 
     panel.innerHTML = `
       <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="mb-0">Bidones — ${nombreCliente}</h5>
+        <h5 class="mb-0">Bidones — ${escaparHtml(nombreCliente)}</h5>
         <button class="btn-close" id="btnCerrarPanelBidones" aria-label="Cerrar"></button>
       </div>
 
@@ -781,7 +773,7 @@ async function mostrarPanelBidones(clienteId) {
           <input type="number" min="0" class="form-control form-control-sm" id="bidonRecibidos" value="0">
         </div>
         <div class="col-md-3">
-          <label class="form-label small mb-1">Prestados (neto)</label>
+          <label class="form-label small mb-1">Entregados en préstamo</label>
           <input type="number" min="0" class="form-control form-control-sm" id="bidonPrestados" value="0">
         </div>
         <div class="col-md-3">
@@ -839,7 +831,7 @@ function renderizarItemsVenta() {
       <div class="col-6">
         <select class="form-select" data-idx="${idx}" data-campo="producto_id">
           ${productosCatalogo.map((p) =>
-            `<option value="${p.producto_id}" ${p.producto_id === item.producto_id ? "selected" : ""}>${p.nombre_producto}</option>`
+            `<option value="${p.producto_id}" ${p.producto_id === item.producto_id ? "selected" : ""}>${escaparHtml(p.nombre_producto)}</option>`
           ).join("")}
         </select>
       </div>
@@ -885,16 +877,21 @@ document.getElementById("btnAgregarItem")?.addEventListener("click", () => {
   recalcularTotal();
 });
 
+let revisionTotalVenta = 0;
 async function recalcularTotal() {
+  const revision = ++revisionTotalVenta;
   const span = document.getElementById("totalVentaPresencial");
   if (!itemsVentaPresencial.length) { span.textContent = "S/ 0.00"; return; }
   try {
     const resumen = await Api.post("/api/cotizar", { items: itemsVentaPresencial });
-    span.textContent = `S/ ${resumen.totalAPagar.toFixed(2)}`;
-  } catch {
-    span.textContent = "S/ 0.00";
+    if (revision !== revisionTotalVenta) return;
+    const descuento = Number(document.getElementById("ventaDescuento").value) || 0;
+    span.textContent = `S/ ${Math.max(0, resumen.totalAPagar - descuento).toFixed(2)}`;
+  } catch (err) {
+    if (revision === revisionTotalVenta) span.textContent = err.message;
   }
 }
+document.getElementById("ventaDescuento").addEventListener("input", recalcularTotal);
 
 document.getElementById("ventaComprobante").addEventListener("change", (e) => {
   const esFactura = e.target.options[e.target.selectedIndex].text === "Factura";
@@ -942,6 +939,7 @@ document.getElementById("formVentaPresencial")?.addEventListener("submit", async
     actualizarIdentificacionVenta();
     document.getElementById("totalVentaPresencial").textContent = "S/ 0.00";
     itemsVentaPresencial = [];
+    revisionTotalVenta++;
     renderizarItemsVenta();
     cargarDashboard();
   } catch (err) {
